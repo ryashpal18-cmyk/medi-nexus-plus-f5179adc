@@ -7,8 +7,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { UserPlus, Search, FileText, Clock, Printer, Download, MessageCircle } from "lucide-react";
+import { UserPlus, Search, FileText, Printer, Download, MessageCircle } from "lucide-react";
 import { useState } from "react";
+import { useAddPatient, useSearchPatients, useAddPrescription, usePatients } from "@/hooks/useDatabase";
+import { toast } from "@/hooks/use-toast";
 
 const orthoAdvice: Record<string, string> = {
   "Plaster Care": "प्लास्टर केयर सलाह:\n• प्लास्टर को सूखा रखें\n• उंगलियों को हिलाते रहें\n• सूजन या सुन्नपन होने पर तुरंत डॉक्टर से मिलें\n• प्लास्टर को खुद न निकालें",
@@ -21,6 +23,57 @@ const orthoAdvice: Record<string, string> = {
 
 export default function OPD() {
   const [advice, setAdvice] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [regForm, setRegForm] = useState({ name: "", mobile: "", age: "", gender: "", address: "" });
+  const [rxForm, setRxForm] = useState({ patient_id: "", diagnosis: "", medicines: "", followup_date: "" });
+
+  const addPatient = useAddPatient();
+  const { data: searchResults } = useSearchPatients(searchQuery);
+  const { data: allPatients } = usePatients();
+  const addPrescription = useAddPrescription();
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!regForm.name || !regForm.mobile) {
+      toast({ title: "Error", description: "Name and mobile are required", variant: "destructive" });
+      return;
+    }
+    try {
+      await addPatient.mutateAsync({
+        name: regForm.name,
+        mobile: regForm.mobile,
+        age: regForm.age ? parseInt(regForm.age) : null,
+        gender: regForm.gender || null,
+        address: regForm.address || null,
+      });
+      toast({ title: "Success", description: "Patient registered successfully!" });
+      setRegForm({ name: "", mobile: "", age: "", gender: "", address: "" });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const handlePrescription = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!rxForm.patient_id || !rxForm.diagnosis) {
+      toast({ title: "Error", description: "Select patient and enter diagnosis", variant: "destructive" });
+      return;
+    }
+    try {
+      await addPrescription.mutateAsync({
+        patient_id: rxForm.patient_id,
+        diagnosis: rxForm.diagnosis,
+        medicines: rxForm.medicines,
+        advice,
+        followup_date: rxForm.followup_date || null,
+      });
+      toast({ title: "Success", description: "Prescription saved!" });
+      setRxForm({ patient_id: "", diagnosis: "", medicines: "", followup_date: "" });
+      setAdvice("");
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  };
 
   return (
     <DashboardLayout>
@@ -30,10 +83,6 @@ export default function OPD() {
             <h1 className="module-header">OPD Module</h1>
             <p className="text-sm text-muted-foreground">Out Patient Department Management</p>
           </div>
-          <Button className="gap-2">
-            <UserPlus className="h-4 w-4" />
-            New Patient
-          </Button>
         </div>
 
         <Tabs defaultValue="register" className="space-y-4">
@@ -46,25 +95,28 @@ export default function OPD() {
           <TabsContent value="register">
             <Card>
               <CardHeader>
-                <CardTitle className="font-heading text-lg">New Patient Registration</CardTitle>
+                <CardTitle className="font-heading text-lg flex items-center gap-2">
+                  <UserPlus className="h-5 w-5 text-primary" />
+                  New Patient Registration
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid sm:grid-cols-2 gap-4">
+                <form onSubmit={handleRegister} className="grid sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>Patient Name</Label>
-                    <Input placeholder="Enter full name" />
+                    <Label>Patient Name *</Label>
+                    <Input placeholder="Enter full name" value={regForm.name} onChange={e => setRegForm(p => ({ ...p, name: e.target.value }))} required />
                   </div>
                   <div className="space-y-2">
-                    <Label>Mobile Number</Label>
-                    <Input placeholder="+91 XXXXX XXXXX" />
+                    <Label>Mobile Number *</Label>
+                    <Input placeholder="+91 XXXXX XXXXX" value={regForm.mobile} onChange={e => setRegForm(p => ({ ...p, mobile: e.target.value }))} required />
                   </div>
                   <div className="space-y-2">
                     <Label>Age</Label>
-                    <Input type="number" placeholder="Age" />
+                    <Input type="number" placeholder="Age" value={regForm.age} onChange={e => setRegForm(p => ({ ...p, age: e.target.value }))} />
                   </div>
                   <div className="space-y-2">
                     <Label>Gender</Label>
-                    <Select>
+                    <Select value={regForm.gender} onValueChange={v => setRegForm(p => ({ ...p, gender: v }))}>
                       <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="male">Male</SelectItem>
@@ -75,12 +127,14 @@ export default function OPD() {
                   </div>
                   <div className="sm:col-span-2 space-y-2">
                     <Label>Address</Label>
-                    <Textarea placeholder="Full address" />
+                    <Textarea placeholder="Full address" value={regForm.address} onChange={e => setRegForm(p => ({ ...p, address: e.target.value }))} />
                   </div>
                   <div className="sm:col-span-2">
-                    <Button className="w-full sm:w-auto">Register Patient</Button>
+                    <Button type="submit" disabled={addPatient.isPending} className="w-full sm:w-auto">
+                      {addPatient.isPending ? "Registering..." : "Register Patient"}
+                    </Button>
                   </div>
-                </div>
+                </form>
               </CardContent>
             </Card>
           </TabsContent>
@@ -92,15 +146,26 @@ export default function OPD() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex gap-2">
-                  <Input placeholder="Search by mobile number or name" className="flex-1" />
-                  <Button variant="outline" className="gap-2">
-                    <Search className="h-4 w-4" />
-                    Search
-                  </Button>
+                  <Input placeholder="Search by mobile number or name" className="flex-1" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+                  <Button variant="outline" className="gap-2"><Search className="h-4 w-4" />Search</Button>
                 </div>
-                <div className="text-center py-8 text-muted-foreground text-sm">
-                  Enter a mobile number or name to search patient records
-                </div>
+                {searchResults && searchResults.length > 0 ? (
+                  <div className="space-y-2">
+                    {searchResults.map(p => (
+                      <div key={p.id} className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/30">
+                        <div>
+                          <p className="font-medium text-sm">{p.name}</p>
+                          <p className="text-xs text-muted-foreground">{p.mobile} · {p.age}y · {p.gender}</p>
+                        </div>
+                        <Badge variant="outline" className="text-xs">{p.address}</Badge>
+                      </div>
+                    ))}
+                  </div>
+                ) : searchQuery ? (
+                  <p className="text-center py-8 text-muted-foreground text-sm">No patients found</p>
+                ) : (
+                  <p className="text-center py-8 text-muted-foreground text-sm">Enter a mobile number or name to search</p>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -114,38 +179,46 @@ export default function OPD() {
                     Digital Prescription
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid sm:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Patient Name</Label>
-                      <Input placeholder="Select patient" />
+                <CardContent>
+                  <form onSubmit={handlePrescription} className="space-y-4">
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Patient *</Label>
+                        <Select value={rxForm.patient_id} onValueChange={v => setRxForm(p => ({ ...p, patient_id: v }))}>
+                          <SelectTrigger><SelectValue placeholder="Select patient" /></SelectTrigger>
+                          <SelectContent>
+                            {allPatients?.map(p => (
+                              <SelectItem key={p.id} value={p.id}>{p.name} ({p.mobile})</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Follow-up Date</Label>
+                        <Input type="date" value={rxForm.followup_date} onChange={e => setRxForm(p => ({ ...p, followup_date: e.target.value }))} />
+                      </div>
                     </div>
                     <div className="space-y-2">
-                      <Label>Date</Label>
-                      <Input type="date" defaultValue={new Date().toISOString().split('T')[0]} />
+                      <Label>Diagnosis *</Label>
+                      <Input placeholder="e.g., Radius Fracture, Knee OA" value={rxForm.diagnosis} onChange={e => setRxForm(p => ({ ...p, diagnosis: e.target.value }))} required />
                     </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Diagnosis</Label>
-                    <Input placeholder="e.g., Radius Fracture, Knee OA" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Medicines</Label>
-                    <Textarea placeholder="Medicine 1 - Dose - Duration&#10;Medicine 2 - Dose - Duration" rows={4} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Advice</Label>
-                    <Textarea placeholder="Special instructions..." rows={3} value={advice} onChange={e => setAdvice(e.target.value)} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Follow-up Date</Label>
-                    <Input type="date" />
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button className="gap-2"><Printer className="h-4 w-4" />Print</Button>
-                    <Button variant="outline" className="gap-2"><Download className="h-4 w-4" />PDF</Button>
-                    <Button variant="outline" className="gap-2 text-success"><MessageCircle className="h-4 w-4" />WhatsApp</Button>
-                  </div>
+                    <div className="space-y-2">
+                      <Label>Medicines</Label>
+                      <Textarea placeholder="Medicine 1 - Dose - Duration&#10;Medicine 2 - Dose - Duration" rows={4} value={rxForm.medicines} onChange={e => setRxForm(p => ({ ...p, medicines: e.target.value }))} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Advice</Label>
+                      <Textarea placeholder="Special instructions..." rows={3} value={advice} onChange={e => setAdvice(e.target.value)} />
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button type="submit" disabled={addPrescription.isPending}>
+                        {addPrescription.isPending ? "Saving..." : "Save Prescription"}
+                      </Button>
+                      <Button type="button" variant="outline" className="gap-2"><Printer className="h-4 w-4" />Print</Button>
+                      <Button type="button" variant="outline" className="gap-2"><Download className="h-4 w-4" />PDF</Button>
+                      <Button type="button" variant="outline" className="gap-2 text-success"><MessageCircle className="h-4 w-4" />WhatsApp</Button>
+                    </div>
+                  </form>
                 </CardContent>
               </Card>
 
@@ -155,13 +228,8 @@ export default function OPD() {
                 </CardHeader>
                 <CardContent className="space-y-2">
                   {Object.keys(orthoAdvice).map((key) => (
-                    <Button
-                      key={key}
-                      variant="outline"
-                      size="sm"
-                      className="w-full justify-start text-xs"
-                      onClick={() => setAdvice(prev => prev ? prev + "\n\n" + orthoAdvice[key] : orthoAdvice[key])}
-                    >
+                    <Button key={key} variant="outline" size="sm" className="w-full justify-start text-xs"
+                      onClick={() => setAdvice(prev => prev ? prev + "\n\n" + orthoAdvice[key] : orthoAdvice[key])}>
                       {key}
                     </Button>
                   ))}
