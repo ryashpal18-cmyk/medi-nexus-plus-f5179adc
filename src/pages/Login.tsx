@@ -5,15 +5,34 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Stethoscope, Eye, EyeOff } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Integrate with Supabase Auth
-    navigate("/");
+    setLoading(true);
+
+    setTimeout(() => {
+      if (username === "Yashpal18" && password === "Aarya@2019") {
+        localStorage.setItem("isLoggedIn", "true");
+        localStorage.setItem("userName", username);
+        navigate("/dashboard");
+      } else {
+        toast({
+          title: "Login Failed",
+          description: "Invalid username or password",
+          variant: "destructive",
+        });
+      }
+      setLoading(false);
+    }, 500);
   };
 
   return (
@@ -36,13 +55,25 @@ export default function Login() {
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
-              <Label>Email</Label>
-              <Input type="email" placeholder="doctor@balajiortho.com" required />
+              <Label>Username</Label>
+              <Input
+                type="text"
+                placeholder="Enter username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
+              />
             </div>
             <div className="space-y-2">
               <Label>Password</Label>
               <div className="relative">
-                <Input type={showPassword ? "text" : "password"} placeholder="••••••••" required />
+                <Input
+                  type={showPassword ? "text" : "password"}
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
                 <Button
                   type="button"
                   variant="ghost"
@@ -54,7 +85,9 @@ export default function Login() {
                 </Button>
               </div>
             </div>
-            <Button type="submit" className="w-full">Sign In</Button>
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? "Signing in..." : "Sign In"}
+            </Button>
             <p className="text-center text-xs text-muted-foreground">
               Contact: +91 8005707783
             </p>
