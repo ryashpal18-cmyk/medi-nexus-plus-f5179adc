@@ -57,11 +57,14 @@ function buildInvoiceHTML(bill: any, index: number) {
       <div style="position:relative;z-index:1;padding:18px 24px 14px;">
         <!-- Header -->
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;">
-          <div>
-            <div style="font-size:17px;font-weight:800;color:#1e3a5f;letter-spacing:-0.3px;">Balaji Ortho Care Center</div>
-            <div style="font-size:10px;color:#475569;margin-top:2px;">Dr. S. S. Rathore (DMRT | BPT)</div>
-            <div style="font-size:9px;color:#64748b;margin-top:1px;">Opp Govt Hospital, Bay Pass Road, Khinwara, Raj. – 306502</div>
-            <div style="font-size:9px;color:#64748b;">Phone: +91 8005707783</div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <img src="/images/logo.png" style="width:50px;height:50px;object-fit:contain;" alt="Logo" />
+            <div>
+              <div style="font-size:17px;font-weight:800;color:#1e3a5f;letter-spacing:-0.3px;">Balaji Ortho Care Center</div>
+              <div style="font-size:10px;color:#475569;margin-top:2px;">Dr. S. S. Rathore (DMRT | BPT)</div>
+              <div style="font-size:9px;color:#64748b;margin-top:1px;">Opp Govt Hospital, Bay Pass Road, Khinwara, Raj. – 306502</div>
+              <div style="font-size:9px;color:#64748b;">Phone: +91 8005707783</div>
+            </div>
           </div>
           <div style="text-align:right;">
             <div style="font-size:20px;font-weight:800;color:#0891b2;letter-spacing:1px;">INVOICE</div>
