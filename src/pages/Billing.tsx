@@ -127,6 +127,7 @@ function buildInvoiceHTML(bill: any, index: number) {
 }
 
 function printInvoice(bill: any) {
+  const logoUrl = window.location.origin + "/images/logo.png";
   const win = window.open("", "_blank", "width=1100,height=800");
   if (!win) return;
 
