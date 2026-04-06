@@ -3,7 +3,8 @@ import {
   Activity, FileText, BarChart3, Settings, Stethoscope, LogOut
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
   SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem,
@@ -11,7 +12,7 @@ import {
 } from "@/components/ui/sidebar";
 
 const menuItems = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard },
+  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "OPD", url: "/opd", icon: Stethoscope },
   { title: "IPD / Beds", url: "/ipd", icon: BedDouble },
   { title: "Appointments", url: "/appointments", icon: Calendar },
@@ -26,6 +27,14 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const location = useLocation();
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    localStorage.removeItem("isLoggedIn");
+    localStorage.removeItem("userName");
+    navigate("/login");
+  };
 
   return (
     <Sidebar collapsible="icon" className="border-r-0">
@@ -77,7 +86,7 @@ export function AppSidebar() {
       <SidebarFooter className="p-3">
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton className="text-sidebar-foreground/50 hover:text-destructive">
+            <SidebarMenuButton className="text-sidebar-foreground/50 hover:text-destructive" onClick={handleLogout}>
               <LogOut className="h-4 w-4 mr-2" />
               {!collapsed && <span>Logout</span>}
             </SidebarMenuButton>

@@ -6,6 +6,10 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Stethoscope, Eye, EyeOff } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+
+const ADMIN_EMAIL = "yashpal18@balajiclinic.local";
+const ADMIN_PASSWORD = "Aarya@2019";
 
 export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
@@ -15,24 +19,43 @@ export default function Login() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
-    setTimeout(() => {
-      if (username === "Yashpal18" && password === "Aarya@2019") {
-        localStorage.setItem("isLoggedIn", "true");
-        localStorage.setItem("userName", username);
-        navigate("/dashboard");
-      } else {
-        toast({
-          title: "Login Failed",
-          description: "Invalid username or password",
-          variant: "destructive",
-        });
+    try {
+      // Map username to email
+      if (username !== "Yashpal18" || password !== "Aarya@2019") {
+        toast({ title: "Login Failed", description: "Invalid username or password", variant: "destructive" });
+        setLoading(false);
+        return;
       }
+
+      // Ensure admin user exists (idempotent)
+      await supabase.functions.invoke("create-admin-user", {
+        body: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD },
+      });
+
+      // Sign in with Supabase Auth
+      const { error } = await supabase.auth.signInWithPassword({
+        email: ADMIN_EMAIL,
+        password: ADMIN_PASSWORD,
+      });
+
+      if (error) throw error;
+
+      localStorage.setItem("isLoggedIn", "true");
+      localStorage.setItem("userName", username);
+      navigate("/dashboard");
+    } catch (err: any) {
+      toast({
+        title: "Login Failed",
+        description: err.message || "Something went wrong",
+        variant: "destructive",
+      });
+    } finally {
       setLoading(false);
-    }, 500);
+    }
   };
 
   return (
