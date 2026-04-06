@@ -158,8 +158,8 @@ function printInvoice(bill: any) {
     </head>
     <body>
       <div class="page">
-        ${buildInvoiceHTML(bill, 1)}
-        ${buildInvoiceHTML(bill, 2)}
+        ${buildInvoiceHTML(bill, 1, logoUrl)}
+        ${buildInvoiceHTML(bill, 2, logoUrl)}
       </div>
       <script>
         window.onload = function() { window.print(); };
