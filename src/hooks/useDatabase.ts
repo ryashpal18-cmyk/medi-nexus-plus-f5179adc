@@ -279,22 +279,42 @@ export function useAddXrayReport() {
   });
 }
 
+// ─── Today's Bills ───
+export function useTodayBills() {
+  const today = new Date().toISOString().split("T")[0];
+  return useQuery({
+    queryKey: ["billing", "today"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("billing")
+        .select("*, patients(name, mobile)")
+        .gte("created_at", `${today}T00:00:00`)
+        .lte("created_at", `${today}T23:59:59`)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
 // ─── Dashboard Stats ───
 export function useDashboardStats() {
   const today = new Date().toISOString().split("T")[0];
   return useQuery({
     queryKey: ["dashboard-stats"],
     queryFn: async () => {
-      const [patients, appointments, pendingBills, beds] = await Promise.all([
+      const [patients, appointments, pendingBills, beds, todayBills] = await Promise.all([
         supabase.from("patients").select("id", { count: "exact", head: true }),
         supabase.from("appointments").select("id", { count: "exact", head: true }).eq("date", today),
         supabase.from("billing").select("amount").eq("status", "Pending"),
         supabase.from("beds").select("id, status"),
+        supabase.from("billing").select("amount").gte("created_at", `${today}T00:00:00`).lte("created_at", `${today}T23:59:59`),
       ]);
       
       const pendingTotal = pendingBills.data?.reduce((sum, b) => sum + Number(b.amount), 0) || 0;
       const totalBeds = beds.data?.length || 0;
       const occupiedBeds = beds.data?.filter(b => b.status === "occupied").length || 0;
+      const todayTotal = todayBills.data?.reduce((sum, b) => sum + Number(b.amount), 0) || 0;
 
       return {
         todayPatients: appointments.count || 0,
@@ -302,6 +322,7 @@ export function useDashboardStats() {
         pendingPayments: pendingTotal,
         bedsOccupied: occupiedBeds,
         totalBeds,
+        todayRevenue: todayTotal,
       };
     },
   });

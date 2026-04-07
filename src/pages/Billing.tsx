@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Receipt, Plus, MessageCircle, Printer } from "lucide-react";
+import { Receipt, Plus, MessageCircle, Printer, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useBills, useAddBill, usePatients, useUpdateBill } from "@/hooks/useDatabase";
 import { useState } from "react";
@@ -17,109 +17,132 @@ const statusStyle: Record<string, string> = {
   Partial: "bg-info/10 text-info",
 };
 
+const SERVICE_OPTIONS = [
+  "OPD Consultation",
+  "X-Ray",
+  "Physiotherapy",
+  "Procedure",
+  "IPD Stay",
+  "Plaster",
+  "MOT Charge",
+  "Medicine",
+  "Dressing",
+  "Injection",
+  "Blood Test",
+  "Other",
+];
+
+interface ServiceItem {
+  name: string;
+  amount: string;
+}
+
 function getWhatsAppLink(patient: string, amount: number) {
   const msg = `Namaste ${patient}, Balaji Ortho Care Center se nivedan hai ki aapka Rs. ${amount} pending hai. Kripya clinic par jama karein. Dhanyawad!`;
   return `https://wa.me/918005707783?text=${encodeURIComponent(msg)}`;
 }
 
-function buildInvoiceHTML(bill: any, index: number, logoUrl: string = "/images/logo.png") {
+function buildInvoiceHTML(bill: any, logoUrl: string = "/images/logo.png") {
   const patientName = (bill.patients as any)?.name || "Patient";
   const invoiceNo = `INV-${bill.id.slice(0, 8).toUpperCase()}`;
   const date = new Date(bill.created_at).toLocaleDateString("en-IN", {
     day: "2-digit", month: "short", year: "numeric",
   });
-  const amount = Number(bill.amount).toLocaleString();
+
+  // Parse services - stored as "Service1, Service2" in service field
+  const services = bill.service.split("|").map((s: string) => {
+    const parts = s.trim().split(":");
+    return { name: parts[0]?.trim() || s.trim(), amount: parts[1] ? Number(parts[1].trim()) : Number(bill.amount) };
+  });
+  const totalAmount = services.reduce((sum: number, s: any) => sum + (s.amount || 0), 0);
+
+  const serviceRows = services.map((s: any, i: number) => `
+    <tr>
+      <td style="padding:5px 10px;color:#334155;font-size:10px;">${i + 1}</td>
+      <td style="padding:5px 10px;color:#334155;font-size:10px;">${s.name}</td>
+      <td style="padding:5px 10px;text-align:right;color:#334155;font-size:10px;">₹${Number(s.amount).toLocaleString()}</td>
+    </tr>
+  `).join("");
 
   return `
     <div style="
-      width: 100%;
-      height: 48%;
+      width: 5.5in;
+      height: 4.1in;
       box-sizing: border-box;
       position: relative;
       overflow: hidden;
       border: 1.5px solid #e0e0e0;
-      border-radius: 10px;
+      border-radius: 8px;
       background: #fff;
       font-family: 'Inter', 'Segoe UI', sans-serif;
       page-break-inside: avoid;
     ">
-      <!-- Top-left cyan wave -->
-      <svg style="position:absolute;top:0;left:0;width:220px;height:120px;z-index:0;" viewBox="0 0 220 120" fill="none">
+      <svg style="position:absolute;top:0;left:0;width:180px;height:90px;z-index:0;" viewBox="0 0 220 120" fill="none">
         <path d="M0 0 H220 C180 30 140 80 0 120 Z" fill="#0891b2" opacity="0.13"/>
         <path d="M0 0 H180 C140 25 100 60 0 90 Z" fill="#06b6d4" opacity="0.18"/>
       </svg>
-      <!-- Bottom-right cyan wave -->
-      <svg style="position:absolute;bottom:0;right:0;width:200px;height:100px;z-index:0;" viewBox="0 0 200 100" fill="none">
+      <svg style="position:absolute;bottom:0;right:0;width:160px;height:80px;z-index:0;" viewBox="0 0 200 100" fill="none">
         <path d="M200 100 H0 C40 70 80 30 200 0 Z" fill="#0891b2" opacity="0.10"/>
         <path d="M200 100 H30 C60 75 100 40 200 15 Z" fill="#06b6d4" opacity="0.14"/>
       </svg>
 
-      <div style="position:relative;z-index:1;padding:18px 24px 14px;">
+      <div style="position:relative;z-index:1;padding:12px 16px 10px;">
         <!-- Header -->
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;">
-          <div style="display:flex;align-items:center;gap:10px;">
-            <img src="${logoUrl}" style="width:50px;height:50px;object-fit:contain;" alt="Logo" />
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <img src="${logoUrl}" style="width:40px;height:40px;object-fit:contain;" alt="Logo" />
             <div>
-              <div style="font-size:17px;font-weight:800;color:#1e3a5f;letter-spacing:-0.3px;">Balaji Ortho Care Center</div>
-              <div style="font-size:10px;color:#475569;margin-top:2px;">Dr. S. S. Rathore (DMRT | BPT)</div>
-              <div style="font-size:9px;color:#64748b;margin-top:1px;">Opp Govt Hospital, Bay Pass Road, Khinwara, Raj. – 306502</div>
-              <div style="font-size:9px;color:#64748b;">Phone: +91 8005707783</div>
+              <div style="font-size:13px;font-weight:800;color:#1e3a5f;">Balaji Ortho Care Center</div>
+              <div style="font-size:8px;color:#475569;margin-top:1px;">Dr. S. S. Rathore (DMRT | BPT)</div>
+              <div style="font-size:7px;color:#64748b;">Opp Govt Hospital, Bay Pass Road, Khinwara, Raj. – 306502</div>
+              <div style="font-size:7px;color:#64748b;">Phone: +91 8005707783</div>
             </div>
           </div>
           <div style="text-align:right;">
-            <div style="font-size:20px;font-weight:800;color:#0891b2;letter-spacing:1px;">INVOICE</div>
-            <div style="font-size:9px;color:#64748b;margin-top:3px;">${invoiceNo}</div>
-            <div style="font-size:9px;color:#64748b;">Date: ${date}</div>
+            <div style="font-size:16px;font-weight:800;color:#0891b2;letter-spacing:1px;">INVOICE</div>
+            <div style="font-size:8px;color:#64748b;margin-top:2px;">${invoiceNo}</div>
+            <div style="font-size:8px;color:#64748b;">Date: ${date}</div>
           </div>
         </div>
 
-        <!-- Divider -->
-        <div style="height:2px;background:linear-gradient(90deg,#0891b2,#1e3a5f);border-radius:2px;margin-bottom:12px;"></div>
+        <div style="height:1.5px;background:linear-gradient(90deg,#0891b2,#1e3a5f);border-radius:2px;margin-bottom:8px;"></div>
 
         <!-- Patient info -->
-        <div style="display:flex;justify-content:space-between;margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
           <div>
-            <div style="font-size:9px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;">Bill To</div>
-            <div style="font-size:13px;font-weight:700;color:#1e3a5f;margin-top:2px;">${patientName}</div>
+            <div style="font-size:7px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;">Bill To</div>
+            <div style="font-size:11px;font-weight:700;color:#1e3a5f;margin-top:1px;">${patientName}</div>
           </div>
           <div style="text-align:right;">
-            <div style="font-size:9px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;">Status</div>
-            <div style="font-size:11px;font-weight:700;color:${bill.status === "Paid" ? "#16a34a" : bill.status === "Pending" ? "#ea580c" : "#0284c7"};margin-top:2px;">${bill.status}</div>
+            <div style="font-size:7px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;">Status</div>
+            <div style="font-size:10px;font-weight:700;color:${bill.status === "Paid" ? "#16a34a" : bill.status === "Pending" ? "#ea580c" : "#0284c7"};margin-top:1px;">${bill.status}</div>
           </div>
         </div>
 
         <!-- Table -->
-        <table style="width:100%;border-collapse:collapse;margin-bottom:10px;font-size:11px;">
+        <table style="width:100%;border-collapse:collapse;margin-bottom:6px;font-size:10px;">
           <thead>
             <tr style="background:#f0f9ff;">
-              <th style="text-align:left;padding:6px 10px;color:#1e3a5f;font-weight:600;border-bottom:1px solid #e2e8f0;">#</th>
-              <th style="text-align:left;padding:6px 10px;color:#1e3a5f;font-weight:600;border-bottom:1px solid #e2e8f0;">Service</th>
-              <th style="text-align:right;padding:6px 10px;color:#1e3a5f;font-weight:600;border-bottom:1px solid #e2e8f0;">Amount</th>
+              <th style="text-align:left;padding:4px 10px;color:#1e3a5f;font-weight:600;border-bottom:1px solid #e2e8f0;font-size:9px;">#</th>
+              <th style="text-align:left;padding:4px 10px;color:#1e3a5f;font-weight:600;border-bottom:1px solid #e2e8f0;font-size:9px;">Service</th>
+              <th style="text-align:right;padding:4px 10px;color:#1e3a5f;font-weight:600;border-bottom:1px solid #e2e8f0;font-size:9px;">Amount</th>
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td style="padding:6px 10px;color:#334155;">1</td>
-              <td style="padding:6px 10px;color:#334155;">${bill.service}</td>
-              <td style="padding:6px 10px;text-align:right;color:#334155;">₹${amount}</td>
-            </tr>
+            ${serviceRows}
           </tbody>
           <tfoot>
             <tr style="border-top:2px solid #0891b2;">
-              <td colspan="2" style="padding:8px 10px;font-weight:800;color:#1e3a5f;font-size:12px;">Grand Total</td>
-              <td style="padding:8px 10px;text-align:right;font-weight:800;color:#0891b2;font-size:14px;">₹${amount}</td>
+              <td colspan="2" style="padding:6px 10px;font-weight:800;color:#1e3a5f;font-size:11px;">Grand Total</td>
+              <td style="padding:6px 10px;text-align:right;font-weight:800;color:#0891b2;font-size:12px;">₹${totalAmount.toLocaleString()}</td>
             </tr>
           </tfoot>
         </table>
 
         <!-- Footer -->
-        <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid #e2e8f0;padding-top:8px;">
-          <div style="display:flex;gap:6px;align-items:center;">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0891b2" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1e3a5f" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
-            <span style="font-size:8px;color:#94a3b8;">Medix Medical Invoice</span>
-          </div>
-          <div style="font-size:8px;color:#94a3b8;">Thank you for choosing Balaji Ortho Care Center</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid #e2e8f0;padding-top:5px;">
+          <span style="font-size:7px;color:#94a3b8;">Medix Medical Invoice</span>
+          <div style="font-size:7px;color:#94a3b8;">Thank you for choosing Balaji Ortho Care Center</div>
         </div>
       </div>
     </div>
@@ -128,7 +151,7 @@ function buildInvoiceHTML(bill: any, index: number, logoUrl: string = "/images/l
 
 function printInvoice(bill: any) {
   const logoUrl = window.location.origin + "/images/logo.png";
-  const win = window.open("", "_blank", "width=1100,height=800");
+  const win = window.open("", "_blank", "width=700,height=1000");
   if (!win) return;
 
   const invoiceHTML = `
@@ -141,25 +164,26 @@ function printInvoice(bill: any) {
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Inter', sans-serif; background: #fff; }
-        @page { size: A4 landscape; margin: 8mm; }
+        @page { size: 5.5in 8.5in; margin: 5mm; }
         @media print {
           body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
         .page {
-          width: 100%;
-          height: 100vh;
+          width: 5.5in;
+          height: 8.5in;
           display: flex;
           flex-direction: column;
           justify-content: space-between;
-          gap: 10mm;
-          padding: 4mm;
+          gap: 4mm;
+          padding: 2mm;
+          margin: 0 auto;
         }
       </style>
     </head>
     <body>
       <div class="page">
-        ${buildInvoiceHTML(bill, 1, logoUrl)}
-        ${buildInvoiceHTML(bill, 2, logoUrl)}
+        ${buildInvoiceHTML(bill, logoUrl)}
+        ${buildInvoiceHTML(bill, logoUrl)}
       </div>
       <script>
         window.onload = function() { window.print(); };
@@ -178,22 +202,35 @@ export default function Billing() {
   const addBill = useAddBill();
   const updateBill = useUpdateBill();
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ patient_id: "", service: "", amount: "" });
+  const [selectedPatient, setSelectedPatient] = useState("");
+  const [services, setServices] = useState<ServiceItem[]>([{ name: "", amount: "" }]);
+
+  const addServiceRow = () => setServices(prev => [...prev, { name: "", amount: "" }]);
+  const removeServiceRow = (idx: number) => setServices(prev => prev.filter((_, i) => i !== idx));
+  const updateService = (idx: number, field: keyof ServiceItem, value: string) => {
+    setServices(prev => prev.map((s, i) => i === idx ? { ...s, [field]: value } : s));
+  };
+
+  const totalAmount = services.reduce((sum, s) => sum + (parseFloat(s.amount) || 0), 0);
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.patient_id || !form.service || !form.amount) {
-      toast({ title: "Error", description: "All fields required", variant: "destructive" });
+    const validServices = services.filter(s => s.name && s.amount);
+    if (!selectedPatient || validServices.length === 0) {
+      toast({ title: "Error", description: "Patient और कम से कम एक service ज़रूरी है", variant: "destructive" });
       return;
     }
     try {
+      // Store as "Service1:Amount1|Service2:Amount2"
+      const serviceStr = validServices.map(s => `${s.name}:${s.amount}`).join("|");
       await addBill.mutateAsync({
-        patient_id: form.patient_id,
-        service: form.service,
-        amount: parseFloat(form.amount),
+        patient_id: selectedPatient,
+        service: serviceStr,
+        amount: totalAmount,
       });
       toast({ title: "Success", description: "Bill created!" });
-      setForm({ patient_id: "", service: "", amount: "" });
+      setSelectedPatient("");
+      setServices([{ name: "", amount: "" }]);
       setOpen(false);
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -212,36 +249,57 @@ export default function Billing() {
             <DialogTrigger asChild>
               <Button className="gap-2"><Plus className="h-4 w-4" />New Bill</Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-w-lg">
               <DialogHeader><DialogTitle className="font-heading">New Bill</DialogTitle></DialogHeader>
               <form onSubmit={handleAdd} className="space-y-4">
                 <div className="space-y-2">
                   <Label>Patient</Label>
-                  <Select value={form.patient_id} onValueChange={v => setForm(p => ({ ...p, patient_id: v }))}>
+                  <Select value={selectedPatient} onValueChange={setSelectedPatient}>
                     <SelectTrigger><SelectValue placeholder="Select patient" /></SelectTrigger>
                     <SelectContent>
                       {patients?.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
+
                 <div className="space-y-2">
-                  <Label>Service</Label>
-                  <Select value={form.service} onValueChange={v => setForm(p => ({ ...p, service: v }))}>
-                    <SelectTrigger><SelectValue placeholder="Select service" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="OPD Consultation">OPD Consultation</SelectItem>
-                      <SelectItem value="X-Ray">X-Ray</SelectItem>
-                      <SelectItem value="Physiotherapy">Physiotherapy</SelectItem>
-                      <SelectItem value="Procedure">Procedure</SelectItem>
-                      <SelectItem value="IPD Stay">IPD Stay</SelectItem>
-                      <SelectItem value="Plaster">Plaster</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <div className="flex items-center justify-between">
+                    <Label>Services</Label>
+                    <Button type="button" variant="outline" size="sm" onClick={addServiceRow} className="h-7 text-xs gap-1">
+                      <Plus className="h-3 w-3" /> Add Service
+                    </Button>
+                  </div>
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {services.map((s, idx) => (
+                      <div key={idx} className="flex gap-2 items-center">
+                        <Select value={s.name} onValueChange={v => updateService(idx, "name", v)}>
+                          <SelectTrigger className="flex-1 h-9"><SelectValue placeholder="Service" /></SelectTrigger>
+                          <SelectContent>
+                            {SERVICE_OPTIONS.map(opt => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          type="number"
+                          placeholder="₹"
+                          className="w-24 h-9"
+                          value={s.amount}
+                          onChange={e => updateService(idx, "amount", e.target.value)}
+                        />
+                        {services.length > 1 && (
+                          <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeServiceRow(idx)}>
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Amount (₹)</Label>
-                  <Input type="number" placeholder="500" value={form.amount} onChange={e => setForm(p => ({ ...p, amount: e.target.value }))} required />
+
+                <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
+                  <span className="text-sm font-medium">Total Amount</span>
+                  <span className="text-lg font-bold text-primary">₹{totalAmount.toLocaleString()}</span>
                 </div>
+
                 <Button type="submit" className="w-full" disabled={addBill.isPending}>
                   {addBill.isPending ? "Creating..." : "Create Bill"}
                 </Button>
@@ -273,37 +331,42 @@ export default function Billing() {
                     </tr>
                   </thead>
                   <tbody>
-                    {bills?.map(bill => (
-                      <tr key={bill.id} className="border-b last:border-0 hover:bg-muted/30">
-                        <td className="py-3 font-medium">{(bill.patients as any)?.name}</td>
-                        <td className="py-3 hidden sm:table-cell text-muted-foreground">{bill.service}</td>
-                        <td className="py-3 text-right font-medium">₹{Number(bill.amount).toLocaleString()}</td>
-                        <td className="py-3 text-center">
-                          <Select value={bill.status} onValueChange={v => updateBill.mutate({ id: bill.id, status: v })}>
-                            <SelectTrigger className={cn("h-7 w-20 text-[10px] border-0 mx-auto", statusStyle[bill.status] || "")}>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="Pending">Pending</SelectItem>
-                              <SelectItem value="Paid">Paid</SelectItem>
-                              <SelectItem value="Partial">Partial</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </td>
-                        <td className="py-3 text-right">
-                          <div className="flex justify-end gap-1">
-                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => printInvoice(bill)}>
-                              <Printer className="h-3 w-3" />
-                            </Button>
-                            {bill.status !== "Paid" && (
-                              <a href={getWhatsAppLink((bill.patients as any)?.name || "", Number(bill.amount))} target="_blank" rel="noopener noreferrer">
-                                <Button variant="ghost" size="icon" className="h-7 w-7 text-success"><MessageCircle className="h-3 w-3" /></Button>
-                              </a>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                    {bills?.map(bill => {
+                      const displayService = bill.service.includes("|")
+                        ? bill.service.split("|").map(s => s.split(":")[0].trim()).join(", ")
+                        : bill.service;
+                      return (
+                        <tr key={bill.id} className="border-b last:border-0 hover:bg-muted/30">
+                          <td className="py-3 font-medium">{(bill.patients as any)?.name}</td>
+                          <td className="py-3 hidden sm:table-cell text-muted-foreground text-xs">{displayService}</td>
+                          <td className="py-3 text-right font-medium">₹{Number(bill.amount).toLocaleString()}</td>
+                          <td className="py-3 text-center">
+                            <Select value={bill.status} onValueChange={v => updateBill.mutate({ id: bill.id, status: v })}>
+                              <SelectTrigger className={cn("h-7 w-20 text-[10px] border-0 mx-auto", statusStyle[bill.status] || "")}>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Pending">Pending</SelectItem>
+                                <SelectItem value="Paid">Paid</SelectItem>
+                                <SelectItem value="Partial">Partial</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </td>
+                          <td className="py-3 text-right">
+                            <div className="flex justify-end gap-1">
+                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => printInvoice(bill)}>
+                                <Printer className="h-3 w-3" />
+                              </Button>
+                              {bill.status !== "Paid" && (
+                                <a href={getWhatsAppLink((bill.patients as any)?.name || "", Number(bill.amount))} target="_blank" rel="noopener noreferrer">
+                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-success"><MessageCircle className="h-3 w-3" /></Button>
+                                </a>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
