@@ -2,12 +2,12 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { StatCard } from "@/components/StatCard";
 import {
   Users, Calendar, Receipt, FileText, Activity, AlertTriangle,
-  Stethoscope, BedDouble, TrendingUp, Clock
+  Stethoscope, BedDouble, TrendingUp, Clock, IndianRupee
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { useDashboardStats, useTodayAppointments, usePrescriptions, usePhysioSessions } from "@/hooks/useDatabase";
+import { useDashboardStats, useTodayAppointments, usePrescriptions, usePhysioSessions, useTodayBills } from "@/hooks/useDatabase";
 import { useNavigate } from "react-router-dom";
 
 const statusColors: Record<string, string> = {
@@ -24,6 +24,9 @@ export default function Dashboard() {
   const { data: todayApts } = useTodayAppointments();
   const { data: prescriptions } = usePrescriptions();
   const { data: physio } = usePhysioSessions();
+  const { data: todayBills } = useTodayBills();
+
+  const todayTotalAmount = todayBills?.reduce((sum, b) => sum + Number(b.amount), 0) || 0;
 
   return (
     <DashboardLayout>
@@ -45,10 +48,11 @@ export default function Dashboard() {
           <StatCard title="Today's Patients" value={stats?.todayPatients ?? 0} icon={Users} variant="primary" />
           <StatCard title="Appointments" value={stats?.todayAppointments ?? 0} icon={Calendar} variant="secondary" />
           <StatCard title="Pending Payments" value={`₹${(stats?.pendingPayments ?? 0).toLocaleString()}`} icon={Receipt} variant="warning" />
-          <StatCard title="Beds Occupied" value={`${stats?.bedsOccupied ?? 0}/${stats?.totalBeds ?? 0}`} icon={BedDouble} variant="success" />
+          <StatCard title="Today's Revenue" value={`₹${(stats?.todayRevenue ?? 0).toLocaleString()}`} icon={IndianRupee} variant="success" />
         </div>
 
-        <div className="grid lg:grid-cols-2 gap-6">
+        <div className="grid lg:grid-cols-3 gap-6">
+          {/* Today's Appointments */}
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
@@ -83,6 +87,75 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
+          {/* Today's Patients Billing */}
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base font-heading flex items-center gap-2">
+                  <Receipt className="h-4 w-4 text-primary" />
+                  Today's Patients
+                </CardTitle>
+                <Button variant="ghost" size="sm" className="text-primary text-xs" onClick={() => navigate("/billing")}>View All</Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {!todayBills?.length && <p className="text-sm text-muted-foreground text-center py-4">No bills today</p>}
+                {todayBills?.slice(0, 6).map((bill) => {
+                  const displayService = bill.service.includes("|")
+                    ? bill.service.split("|").map((s: string) => s.split(":")[0].trim()).join(", ")
+                    : bill.service;
+                  return (
+                    <div key={bill.id} className="flex items-center justify-between py-2 border-b last:border-0">
+                      <div>
+                        <p className="text-sm font-medium">{(bill.patients as any)?.name}</p>
+                        <p className="text-xs text-muted-foreground truncate max-w-[150px]">{displayService}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-bold text-primary">₹{Number(bill.amount).toLocaleString()}</p>
+                        <Badge variant="secondary" className={`text-[10px] border-0 ${bill.status === "Paid" ? "bg-success/10 text-success" : "bg-warning/10 text-warning"}`}>
+                          {bill.status}
+                        </Badge>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {todayBills && todayBills.length > 0 && (
+                <div className="mt-4 p-3 bg-primary/10 rounded-lg flex justify-between items-center">
+                  <span className="text-sm font-medium">Total ({todayBills.length} patients)</span>
+                  <span className="text-lg font-bold text-primary">₹{todayTotalAmount.toLocaleString()}</span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Quick Actions */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base font-heading">Quick Actions</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { label: "New Patient", icon: Users, path: "/opd" },
+                  { label: "New Appointment", icon: Calendar, path: "/appointments" },
+                  { label: "Create Bill", icon: Receipt, path: "/billing" },
+                  { label: "Upload X-Ray", icon: FileText, path: "/reports" },
+                  { label: "Physiotherapy", icon: Activity, path: "/physiotherapy" },
+                  { label: "View Reports", icon: TrendingUp, path: "/analytics" },
+                ].map((action) => (
+                  <Button key={action.label} variant="outline" className="h-auto py-3 flex flex-col items-center gap-2 hover:bg-accent" onClick={() => navigate(action.path)}>
+                    <action.icon className="h-5 w-5 text-primary" />
+                    <span className="text-xs">{action.label}</span>
+                  </Button>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="grid lg:grid-cols-2 gap-6">
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
@@ -106,29 +179,6 @@ export default function Dashboard() {
                   </span>
                 </div>
               ))}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base font-heading">Quick Actions</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  { label: "New Patient", icon: Users, path: "/opd" },
-                  { label: "New Appointment", icon: Calendar, path: "/appointments" },
-                  { label: "Create Bill", icon: Receipt, path: "/billing" },
-                  { label: "Upload X-Ray", icon: FileText, path: "/reports" },
-                  { label: "Physiotherapy", icon: Activity, path: "/physiotherapy" },
-                  { label: "View Reports", icon: TrendingUp, path: "/analytics" },
-                ].map((action) => (
-                  <Button key={action.label} variant="outline" className="h-auto py-3 flex flex-col items-center gap-2 hover:bg-accent" onClick={() => navigate(action.path)}>
-                    <action.icon className="h-5 w-5 text-primary" />
-                    <span className="text-xs">{action.label}</span>
-                  </Button>
-                ))}
-              </div>
             </CardContent>
           </Card>
 
