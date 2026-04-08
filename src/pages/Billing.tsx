@@ -40,35 +40,8 @@ interface ServiceItem {
   amount: string;
 }
 
-function getSMSText(patientName: string, services: string, totalAmount: number, date: string, invoiceNo: string, pdfLink: string) {
-  return `Balaji Ortho Care Center
-
-Patient Name: ${patientName}
-Service: ${services}
-Amount: ₹${totalAmount.toLocaleString()}
-Date: ${date}
-Invoice No: ${invoiceNo}
-
-Download Invoice PDF:
-${pdfLink}
-
-View reports & book appointment online:
-https://balaji-health-hub.lovable.app/
-
-Contact: +91 8005707783
-Thank you for visiting.`;
-}
-
-function openSMS(mobile: string, text: string) {
-  const cleanMobile = mobile?.replace(/\D/g, "") || "";
-  const num = cleanMobile.startsWith("91") ? cleanMobile : `91${cleanMobile}`;
-  // sms: link works on mobile devices
-  const smsUrl = `sms:+${num}?body=${encodeURIComponent(text)}`;
-  window.open(smsUrl, "_self");
-}
-
-function getWhatsAppBillLink(patient: string, mobile: string, amount: number, services: string, status: string) {
-  const msg = `Namaste ${patient},\n\nBalaji Ortho Care Center\nDr. S. S. Rathore (DMRT | BPT)\n\n📋 Bill Details:\n${services}\n\n💰 Total: ₹${amount.toLocaleString()}\n📌 Status: ${status}\n\nDhanyawad!\n📞 +91 8005707783`;
+function getWhatsAppBillLink(patient: string, mobile: string, amount: number, services: string, status: string, pdfUrl?: string) {
+  const msg = `🙏 Namaste ${patient},\n\nBalaji Ortho Care Center\nDr. S. S. Rathore (DMRT | BPT)\n\n📋 Bill Details:\n${services}\n\n💰 Total: ₹${amount.toLocaleString()}\n📌 Status: ${status}${pdfUrl ? `\n\n📥 Download Invoice PDF:\n${pdfUrl}` : ""}\n\n🌐 View reports & book appointment online:\nhttps://balaji-health-hub.lovable.app/\n\n📞 Contact: +91 8005707783\nDhanyawad! 🙏`;
   const cleanMobile = mobile?.replace(/\D/g, "") || "";
   const num = cleanMobile.startsWith("91") ? cleanMobile : `91${cleanMobile}`;
   return `https://wa.me/${num}?text=${encodeURIComponent(msg)}`;
@@ -93,6 +66,9 @@ function buildInvoiceHTML(bill: any, logoUrl: string = "/images/logo.png") {
     return { name: parts[0]?.trim() || s.trim(), amount: parts[1] ? Number(parts[1].trim()) : Number(bill.amount) };
   });
   const totalAmount = services.reduce((sum: number, s: any) => sum + (s.amount || 0), 0);
+  const amountPaid = Number((bill as any).amount_paid || 0);
+  const dueAmount = totalAmount - amountPaid;
+  const paymentMode = (bill as any).payment_mode || "—";
 
   const serviceRows = services.map((s: any, i: number) => `
     <tr>
@@ -168,8 +144,16 @@ function buildInvoiceHTML(bill: any, logoUrl: string = "/images/logo.png") {
           </tbody>
           <tfoot>
             <tr style="border-top:2px solid #0891b2;">
-              <td colspan="2" style="padding:6px 10px;font-weight:800;color:#1e3a5f;font-size:11px;">Grand Total</td>
-              <td style="padding:6px 10px;text-align:right;font-weight:800;color:#0891b2;font-size:12px;">₹${totalAmount.toLocaleString()}</td>
+              <td colspan="2" style="padding:4px 10px;font-weight:800;color:#1e3a5f;font-size:10px;">Grand Total</td>
+              <td style="padding:4px 10px;text-align:right;font-weight:800;color:#0891b2;font-size:11px;">₹${totalAmount.toLocaleString()}</td>
+            </tr>
+            <tr>
+              <td colspan="2" style="padding:2px 10px;font-size:9px;color:#475569;">Paid (${paymentMode})</td>
+              <td style="padding:2px 10px;text-align:right;font-size:9px;color:#16a34a;font-weight:600;">₹${amountPaid.toLocaleString()}</td>
+            </tr>
+            <tr>
+              <td colspan="2" style="padding:2px 10px;font-size:9px;color:#475569;font-weight:700;">Due</td>
+              <td style="padding:2px 10px;text-align:right;font-size:9px;color:#ea580c;font-weight:700;">₹${dueAmount.toLocaleString()}</td>
             </tr>
           </tfoot>
         </table>
@@ -266,7 +250,6 @@ async function generateAndUploadPDF(bill: any): Promise<string | null> {
 
     const { data: urlData } = supabase.storage.from("invoices").getPublicUrl(fileName);
 
-    // Save URL to billing record
     await supabase.from("billing").update({ invoice_pdf_url: urlData.publicUrl } as any).eq("id", bill.id);
 
     return urlData.publicUrl;
@@ -276,20 +259,6 @@ async function generateAndUploadPDF(bill: any): Promise<string | null> {
   } finally {
     document.body.removeChild(container);
   }
-}
-
-function sendBillWhatsApp(bill: any) {
-  const patient = (bill.patients as any);
-  const mobile = patient?.mobile || "";
-  const name = patient?.name || "Patient";
-  if (!mobile) {
-    return null;
-  }
-  const serviceList = bill.service.split("|").map((s: string) => {
-    const parts = s.trim().split(":");
-    return `• ${parts[0]?.trim()}: ₹${parts[1]?.trim() || bill.amount}`;
-  }).join("\n");
-  return getWhatsAppBillLink(name, mobile, Number(bill.amount), serviceList, bill.status);
 }
 
 export default function Billing() {
@@ -302,6 +271,8 @@ export default function Billing() {
   const [editingBill, setEditingBill] = useState<any>(null);
   const [selectedPatient, setSelectedPatient] = useState("");
   const [services, setServices] = useState<ServiceItem[]>([{ name: "", amount: "" }]);
+  const [amountPaid, setAmountPaid] = useState("");
+  const [paymentMode, setPaymentMode] = useState("");
   const [isSending, setIsSending] = useState(false);
 
   const addServiceRow = () => setServices(prev => [...prev, { name: "", amount: "" }]);
@@ -311,6 +282,14 @@ export default function Billing() {
   };
 
   const totalAmount = services.reduce((sum, s) => sum + (parseFloat(s.amount) || 0), 0);
+  const paidNum = parseFloat(amountPaid) || 0;
+  const dueAmount = totalAmount - paidNum;
+
+  const computeStatus = () => {
+    if (paidNum <= 0) return "Pending";
+    if (paidNum >= totalAmount) return "Paid";
+    return "Partial";
+  };
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -322,39 +301,37 @@ export default function Billing() {
     setIsSending(true);
     try {
       const serviceStr = validServices.map(s => `${s.name}:${s.amount}`).join("|");
+      const status = computeStatus();
       const result = await addBill.mutateAsync({
         patient_id: selectedPatient,
         service: serviceStr,
         amount: totalAmount,
-      });
+        status,
+        amount_paid: paidNum,
+        payment_mode: paymentMode || null,
+      } as any);
 
-      toast({ title: "Bill Created", description: "Generating PDF & preparing SMS..." });
+      toast({ title: "Bill Created", description: "Generating PDF & sending WhatsApp..." });
 
       // Generate PDF and upload
       const pdfUrl = await generateAndUploadPDF(result);
       const patient = (result.patients as any);
       const patientName = patient?.name || "Patient";
       const mobile = patient?.mobile || "";
-      const invoiceNo = `INV-${result.id.slice(0, 8).toUpperCase()}`;
-      const date = new Date(result.created_at).toLocaleDateString("en-IN", {
-        day: "2-digit", month: "short", year: "numeric",
-      });
-      const displayServices = validServices.map(s => s.name).join(", ");
+      const displayServices = validServices.map(s => `• ${s.name}: ₹${s.amount}`).join("\n");
 
-      if (pdfUrl && mobile) {
-        const smsText = getSMSText(patientName, displayServices, totalAmount, date, invoiceNo, pdfUrl);
-        openSMS(mobile, smsText);
-        toast({ title: "✅ SMS Ready", description: "SMS sharing screen opened" });
-      } else if (!mobile) {
-        toast({ title: "⚠️ No Mobile", description: "Patient का mobile number नहीं है, SMS नहीं भेजा जा सका", variant: "destructive" });
+      if (mobile) {
+        const waUrl = getWhatsAppBillLink(patientName, mobile, totalAmount, displayServices, status, pdfUrl || undefined);
+        window.open(waUrl, "_blank");
+        toast({ title: "✅ WhatsApp Opened", description: "Invoice PDF link के साथ WhatsApp share opened" });
       } else {
-        toast({ title: "⚠️ PDF Error", description: "PDF upload में error, WhatsApp से भेजा जाएगा", variant: "destructive" });
-        const whatsappUrl = sendBillWhatsApp(result);
-        if (whatsappUrl) window.open(whatsappUrl, "_blank");
+        toast({ title: "⚠️ No Mobile", description: "Patient का mobile number नहीं है", variant: "destructive" });
       }
 
       setSelectedPatient("");
       setServices([{ name: "", amount: "" }]);
+      setAmountPaid("");
+      setPaymentMode("");
       setOpen(false);
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -363,7 +340,7 @@ export default function Billing() {
     }
   };
 
-  const handleResendSMS = async (bill: any) => {
+  const handleResendWhatsApp = async (bill: any) => {
     const patient = (bill.patients as any);
     const mobile = patient?.mobile || "";
     const patientName = patient?.name || "Patient";
@@ -372,26 +349,19 @@ export default function Billing() {
       return;
     }
 
-    const invoiceNo = `INV-${bill.id.slice(0, 8).toUpperCase()}`;
-    const date = new Date(bill.created_at).toLocaleDateString("en-IN", {
-      day: "2-digit", month: "short", year: "numeric",
-    });
-    const displayServices = bill.service.split("|").map((s: string) => s.split(":")[0].trim()).join(", ");
-
     let pdfUrl = (bill as any).invoice_pdf_url;
-
-    // If no stored PDF URL, generate one now
     if (!pdfUrl) {
       toast({ title: "Generating PDF...", description: "Please wait" });
       pdfUrl = await generateAndUploadPDF(bill);
     }
 
-    if (pdfUrl) {
-      const smsText = getSMSText(patientName, displayServices, Number(bill.amount), date, invoiceNo, pdfUrl);
-      openSMS(mobile, smsText);
-    } else {
-      toast({ title: "Error", description: "PDF generate नहीं हो पाया", variant: "destructive" });
-    }
+    const displayServices = bill.service.split("|").map((s: string) => {
+      const parts = s.trim().split(":");
+      return `• ${parts[0]?.trim()}: ₹${parts[1]?.trim() || bill.amount}`;
+    }).join("\n");
+
+    const waUrl = getWhatsAppBillLink(patientName, mobile, Number(bill.amount), displayServices, bill.status, pdfUrl || undefined);
+    window.open(waUrl, "_blank");
   };
 
   const handleEdit = (bill: any) => {
@@ -401,6 +371,8 @@ export default function Billing() {
       return { name: parts[0]?.trim() || "", amount: parts[1]?.trim() || String(bill.amount) };
     });
     setServices(parsedServices);
+    setAmountPaid(String((bill as any).amount_paid || 0));
+    setPaymentMode((bill as any).payment_mode || "");
     setEditOpen(true);
   };
 
@@ -412,20 +384,44 @@ export default function Billing() {
       toast({ title: "Error", description: "कम से कम एक service ज़रूरी है", variant: "destructive" });
       return;
     }
+    setIsSending(true);
     try {
       const serviceStr = validServices.map(s => `${s.name}:${s.amount}`).join("|");
       const newTotal = validServices.reduce((sum, s) => sum + (parseFloat(s.amount) || 0), 0);
+      const status = computeStatus();
       await updateBill.mutateAsync({
         id: editingBill.id,
         service: serviceStr,
         amount: newTotal,
-      });
-      toast({ title: "Success", description: "Bill updated!" });
+        status,
+        amount_paid: paidNum,
+        payment_mode: paymentMode || null,
+      } as any);
+
+      // Re-generate PDF after edit
+      const updatedBill = { ...editingBill, service: serviceStr, amount: newTotal, status, amount_paid: paidNum, payment_mode: paymentMode };
+      const pdfUrl = await generateAndUploadPDF(updatedBill);
+
+      const patient = (editingBill.patients as any);
+      const mobile = patient?.mobile || "";
+      const patientName = patient?.name || "Patient";
+
+      if (mobile) {
+        const displayServices = validServices.map(s => `• ${s.name}: ₹${s.amount}`).join("\n");
+        const waUrl = getWhatsAppBillLink(patientName, mobile, newTotal, displayServices, status, pdfUrl || undefined);
+        window.open(waUrl, "_blank");
+      }
+
+      toast({ title: "Success", description: "Bill updated & WhatsApp sent!" });
       setEditOpen(false);
       setEditingBill(null);
       setServices([{ name: "", amount: "" }]);
+      setAmountPaid("");
+      setPaymentMode("");
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -441,11 +437,13 @@ export default function Billing() {
         : bill.service;
       return {
         "Patient Name": patient?.name || "",
-        "Age": "",
         "Mobile": patient?.mobile || "",
         "Village/Address": patient?.address || "",
         "Service": displayService,
         "Amount (₹)": Number(bill.amount),
+        "Paid (₹)": Number((bill as any).amount_paid || 0),
+        "Due (₹)": Number(bill.amount) - Number((bill as any).amount_paid || 0),
+        "Payment Mode": (bill as any).payment_mode || "",
         "Status": bill.status,
         "Date": new Date(bill.created_at).toLocaleDateString("en-IN"),
       };
@@ -492,6 +490,39 @@ export default function Billing() {
     </div>
   );
 
+  const renderPaymentSection = () => (
+    <div className="space-y-3">
+      <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
+        <span className="text-sm font-medium">Total Amount</span>
+        <span className="text-lg font-bold text-primary">₹{totalAmount.toLocaleString()}</span>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <Label className="text-xs">Payment Mode</Label>
+          <Select value={paymentMode} onValueChange={setPaymentMode}>
+            <SelectTrigger className="h-9"><SelectValue placeholder="Select" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Cash">Cash</SelectItem>
+              <SelectItem value="UPI">UPI</SelectItem>
+              <SelectItem value="Card">Card</SelectItem>
+              <SelectItem value="Online">Online</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Amount Paid (₹)</Label>
+          <Input type="number" placeholder="0" className="h-9" value={amountPaid} onChange={e => setAmountPaid(e.target.value)} />
+        </div>
+      </div>
+      <div className="flex justify-between items-center p-2 rounded-lg border border-dashed">
+        <span className="text-xs font-medium text-muted-foreground">Due Amount</span>
+        <span className={cn("text-sm font-bold", dueAmount > 0 ? "text-destructive" : "text-success")}>
+          ₹{dueAmount.toLocaleString()}
+        </span>
+      </div>
+    </div>
+  );
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -504,7 +535,7 @@ export default function Billing() {
             <Button variant="outline" className="gap-2" onClick={exportToExcel}>
               <Download className="h-4 w-4" /> Excel Export
             </Button>
-            <Dialog open={open} onOpenChange={setOpen}>
+            <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setServices([{ name: "", amount: "" }]); setAmountPaid(""); setPaymentMode(""); } }}>
               <DialogTrigger asChild>
                 <Button className="gap-2"><Plus className="h-4 w-4" />New Bill</Button>
               </DialogTrigger>
@@ -516,17 +547,14 @@ export default function Billing() {
                     <Select value={selectedPatient} onValueChange={setSelectedPatient}>
                       <SelectTrigger><SelectValue placeholder="Select patient" /></SelectTrigger>
                       <SelectContent>
-                        {patients?.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                        {patients?.map(p => <SelectItem key={p.id} value={p.id}>{p.name} {p.mobile ? `(${p.mobile})` : ""}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
                   {renderServiceForm()}
-                  <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
-                    <span className="text-sm font-medium">Total Amount</span>
-                    <span className="text-lg font-bold text-primary">₹{totalAmount.toLocaleString()}</span>
-                  </div>
+                  {renderPaymentSection()}
                   <Button type="submit" className="w-full" disabled={addBill.isPending || isSending}>
-                    {isSending ? "Generating PDF & SMS..." : addBill.isPending ? "Creating..." : "Save Bill & Send SMS"}
+                    {isSending ? "PDF & WhatsApp भेज रहे हैं..." : addBill.isPending ? "Creating..." : "💾 Save Bill & Send WhatsApp"}
                   </Button>
                 </form>
               </DialogContent>
@@ -535,7 +563,7 @@ export default function Billing() {
         </div>
 
         {/* Edit Bill Dialog */}
-        <Dialog open={editOpen} onOpenChange={(v) => { setEditOpen(v); if (!v) { setEditingBill(null); setServices([{ name: "", amount: "" }]); } }}>
+        <Dialog open={editOpen} onOpenChange={(v) => { setEditOpen(v); if (!v) { setEditingBill(null); setServices([{ name: "", amount: "" }]); setAmountPaid(""); setPaymentMode(""); } }}>
           <DialogContent className="max-w-lg">
             <DialogHeader><DialogTitle className="font-heading">Edit Bill</DialogTitle></DialogHeader>
             <form onSubmit={handleEditSave} className="space-y-4">
@@ -543,12 +571,9 @@ export default function Billing() {
                 <p className="text-sm font-medium">Patient: <span className="text-primary">{(editingBill?.patients as any)?.name}</span></p>
               </div>
               {renderServiceForm()}
-              <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
-                <span className="text-sm font-medium">Total Amount</span>
-                <span className="text-lg font-bold text-primary">₹{totalAmount.toLocaleString()}</span>
-              </div>
-              <Button type="submit" className="w-full" disabled={updateBill.isPending}>
-                {updateBill.isPending ? "Saving..." : "Save Changes"}
+              {renderPaymentSection()}
+              <Button type="submit" className="w-full" disabled={updateBill.isPending || isSending}>
+                {isSending ? "Saving & sending..." : updateBill.isPending ? "Saving..." : "💾 Save Changes & Send WhatsApp"}
               </Button>
             </form>
           </DialogContent>
@@ -572,6 +597,8 @@ export default function Billing() {
                       <th className="text-left py-2 font-medium">Patient</th>
                       <th className="text-left py-2 font-medium hidden sm:table-cell">Service</th>
                       <th className="text-right py-2 font-medium">Amount</th>
+                      <th className="text-right py-2 font-medium hidden sm:table-cell">Paid</th>
+                      <th className="text-right py-2 font-medium hidden sm:table-cell">Due</th>
                       <th className="text-center py-2 font-medium">Status</th>
                       <th className="text-right py-2 font-medium">Actions</th>
                     </tr>
@@ -582,13 +609,17 @@ export default function Billing() {
                       const displayService = bill.service.includes("|")
                         ? bill.service.split("|").map((s: string) => s.split(":")[0].trim()).join(", ")
                         : bill.service;
+                      const paid = Number((bill as any).amount_paid || 0);
+                      const due = Number(bill.amount) - paid;
                       return (
                         <tr key={bill.id} className="border-b last:border-0 hover:bg-muted/30">
                           <td className="py-3 font-medium">{patient?.name}</td>
                           <td className="py-3 hidden sm:table-cell text-muted-foreground text-xs">{displayService}</td>
                           <td className="py-3 text-right font-medium">₹{Number(bill.amount).toLocaleString()}</td>
+                          <td className="py-3 text-right hidden sm:table-cell text-success font-medium">₹{paid.toLocaleString()}</td>
+                          <td className="py-3 text-right hidden sm:table-cell text-destructive font-medium">{due > 0 ? `₹${due.toLocaleString()}` : "—"}</td>
                           <td className="py-3 text-center">
-                            <Select value={bill.status} onValueChange={v => updateBill.mutate({ id: bill.id, status: v })}>
+                            <Select value={bill.status} onValueChange={v => updateBill.mutate({ id: bill.id, status: v } as any)}>
                               <SelectTrigger className={cn("h-7 w-20 text-[10px] border-0 mx-auto", statusStyle[bill.status] || "")}>
                                 <SelectValue />
                               </SelectTrigger>
@@ -607,12 +638,12 @@ export default function Billing() {
                               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => printInvoice(bill)} title="Print">
                                 <Printer className="h-3 w-3" />
                               </Button>
-                              <Button variant="ghost" size="icon" className="h-7 w-7 text-primary" onClick={() => handleResendSMS(bill)} title="Resend SMS">
-                                <Send className="h-3 w-3" />
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-success" onClick={() => handleResendWhatsApp(bill)} title="Resend WhatsApp">
+                                <MessageCircle className="h-3 w-3" />
                               </Button>
                               {bill.status !== "Paid" && patient?.mobile && (
-                                <a href={getWhatsAppReminderLink(patient?.name || "", patient?.mobile || "", Number(bill.amount))} target="_blank" rel="noopener noreferrer">
-                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-success" title="WhatsApp Reminder"><MessageCircle className="h-3 w-3" /></Button>
+                                <a href={getWhatsAppReminderLink(patient?.name || "", patient?.mobile || "", Number(bill.amount) - paid)} target="_blank" rel="noopener noreferrer">
+                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-warning" title="Payment Reminder"><Send className="h-3 w-3" /></Button>
                                 </a>
                               )}
                             </div>
