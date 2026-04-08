@@ -5,12 +5,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Receipt, Plus, MessageCircle, Printer, Trash2, Pencil, Download } from "lucide-react";
+import { Receipt, Plus, MessageCircle, Printer, Trash2, Pencil, Download, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useBills, useAddBill, usePatients, useUpdateBill } from "@/hooks/useDatabase";
 import { useState } from "react";
 import { toast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 import * as XLSX from "xlsx";
+import html2pdf from "html2pdf.js";
 
 const statusStyle: Record<string, string> = {
   Paid: "bg-success/10 text-success",
@@ -36,6 +38,33 @@ const SERVICE_OPTIONS = [
 interface ServiceItem {
   name: string;
   amount: string;
+}
+
+function getSMSText(patientName: string, services: string, totalAmount: number, date: string, invoiceNo: string, pdfLink: string) {
+  return `Balaji Ortho Care Center
+
+Patient Name: ${patientName}
+Service: ${services}
+Amount: ₹${totalAmount.toLocaleString()}
+Date: ${date}
+Invoice No: ${invoiceNo}
+
+Download Invoice PDF:
+${pdfLink}
+
+View reports & book appointment online:
+https://balaji-health-hub.lovable.app/
+
+Contact: +91 8005707783
+Thank you for visiting.`;
+}
+
+function openSMS(mobile: string, text: string) {
+  const cleanMobile = mobile?.replace(/\D/g, "") || "";
+  const num = cleanMobile.startsWith("91") ? cleanMobile : `91${cleanMobile}`;
+  // sms: link works on mobile devices
+  const smsUrl = `sms:+${num}?body=${encodeURIComponent(text)}`;
+  window.open(smsUrl, "_self");
 }
 
 function getWhatsAppBillLink(patient: string, mobile: string, amount: number, services: string, status: string) {
@@ -201,6 +230,54 @@ function printInvoice(bill: any) {
   win.document.close();
 }
 
+async function generateAndUploadPDF(bill: any): Promise<string | null> {
+  const logoUrl = window.location.origin + "/images/logo.png";
+  const html = buildInvoiceHTML(bill, logoUrl);
+
+  const container = document.createElement("div");
+  container.innerHTML = html;
+  container.style.position = "absolute";
+  container.style.left = "-9999px";
+  document.body.appendChild(container);
+
+  try {
+    const pdfBlob = await html2pdf()
+      .set({
+        margin: 2,
+        filename: `invoice.pdf`,
+        image: { type: "jpeg", quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: "in", format: [5.5, 8.5], orientation: "portrait" },
+      })
+      .from(container)
+      .outputPdf("blob");
+
+    const invoiceNo = `INV-${bill.id.slice(0, 8).toUpperCase()}`;
+    const fileName = `${invoiceNo}-${Date.now()}.pdf`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("invoices")
+      .upload(fileName, pdfBlob, { contentType: "application/pdf", upsert: true });
+
+    if (uploadError) {
+      console.error("Upload error:", uploadError);
+      return null;
+    }
+
+    const { data: urlData } = supabase.storage.from("invoices").getPublicUrl(fileName);
+
+    // Save URL to billing record
+    await supabase.from("billing").update({ invoice_pdf_url: urlData.publicUrl } as any).eq("id", bill.id);
+
+    return urlData.publicUrl;
+  } catch (err) {
+    console.error("PDF generation error:", err);
+    return null;
+  } finally {
+    document.body.removeChild(container);
+  }
+}
+
 function sendBillWhatsApp(bill: any) {
   const patient = (bill.patients as any);
   const mobile = patient?.mobile || "";
@@ -225,6 +302,7 @@ export default function Billing() {
   const [editingBill, setEditingBill] = useState<any>(null);
   const [selectedPatient, setSelectedPatient] = useState("");
   const [services, setServices] = useState<ServiceItem[]>([{ name: "", amount: "" }]);
+  const [isSending, setIsSending] = useState(false);
 
   const addServiceRow = () => setServices(prev => [...prev, { name: "", amount: "" }]);
   const removeServiceRow = (idx: number) => setServices(prev => prev.filter((_, i) => i !== idx));
@@ -241,6 +319,7 @@ export default function Billing() {
       toast({ title: "Error", description: "Patient और कम से कम एक service ज़रूरी है", variant: "destructive" });
       return;
     }
+    setIsSending(true);
     try {
       const serviceStr = validServices.map(s => `${s.name}:${s.amount}`).join("|");
       const result = await addBill.mutateAsync({
@@ -248,12 +327,30 @@ export default function Billing() {
         service: serviceStr,
         amount: totalAmount,
       });
-      toast({ title: "Success", description: "Bill created!" });
 
-      // Auto-send WhatsApp
-      const whatsappUrl = sendBillWhatsApp(result);
-      if (whatsappUrl) {
-        window.open(whatsappUrl, "_blank");
+      toast({ title: "Bill Created", description: "Generating PDF & preparing SMS..." });
+
+      // Generate PDF and upload
+      const pdfUrl = await generateAndUploadPDF(result);
+      const patient = (result.patients as any);
+      const patientName = patient?.name || "Patient";
+      const mobile = patient?.mobile || "";
+      const invoiceNo = `INV-${result.id.slice(0, 8).toUpperCase()}`;
+      const date = new Date(result.created_at).toLocaleDateString("en-IN", {
+        day: "2-digit", month: "short", year: "numeric",
+      });
+      const displayServices = validServices.map(s => s.name).join(", ");
+
+      if (pdfUrl && mobile) {
+        const smsText = getSMSText(patientName, displayServices, totalAmount, date, invoiceNo, pdfUrl);
+        openSMS(mobile, smsText);
+        toast({ title: "✅ SMS Ready", description: "SMS sharing screen opened" });
+      } else if (!mobile) {
+        toast({ title: "⚠️ No Mobile", description: "Patient का mobile number नहीं है, SMS नहीं भेजा जा सका", variant: "destructive" });
+      } else {
+        toast({ title: "⚠️ PDF Error", description: "PDF upload में error, WhatsApp से भेजा जाएगा", variant: "destructive" });
+        const whatsappUrl = sendBillWhatsApp(result);
+        if (whatsappUrl) window.open(whatsappUrl, "_blank");
       }
 
       setSelectedPatient("");
@@ -261,12 +358,44 @@ export default function Billing() {
       setOpen(false);
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const handleResendSMS = async (bill: any) => {
+    const patient = (bill.patients as any);
+    const mobile = patient?.mobile || "";
+    const patientName = patient?.name || "Patient";
+    if (!mobile) {
+      toast({ title: "Error", description: "Patient का mobile number नहीं है", variant: "destructive" });
+      return;
+    }
+
+    const invoiceNo = `INV-${bill.id.slice(0, 8).toUpperCase()}`;
+    const date = new Date(bill.created_at).toLocaleDateString("en-IN", {
+      day: "2-digit", month: "short", year: "numeric",
+    });
+    const displayServices = bill.service.split("|").map((s: string) => s.split(":")[0].trim()).join(", ");
+
+    let pdfUrl = (bill as any).invoice_pdf_url;
+
+    // If no stored PDF URL, generate one now
+    if (!pdfUrl) {
+      toast({ title: "Generating PDF...", description: "Please wait" });
+      pdfUrl = await generateAndUploadPDF(bill);
+    }
+
+    if (pdfUrl) {
+      const smsText = getSMSText(patientName, displayServices, Number(bill.amount), date, invoiceNo, pdfUrl);
+      openSMS(mobile, smsText);
+    } else {
+      toast({ title: "Error", description: "PDF generate नहीं हो पाया", variant: "destructive" });
     }
   };
 
   const handleEdit = (bill: any) => {
     setEditingBill(bill);
-    // Parse services from stored format
     const parsedServices = bill.service.split("|").map((s: string) => {
       const parts = s.trim().split(":");
       return { name: parts[0]?.trim() || "", amount: parts[1]?.trim() || String(bill.amount) };
@@ -396,8 +525,8 @@ export default function Billing() {
                     <span className="text-sm font-medium">Total Amount</span>
                     <span className="text-lg font-bold text-primary">₹{totalAmount.toLocaleString()}</span>
                   </div>
-                  <Button type="submit" className="w-full" disabled={addBill.isPending}>
-                    {addBill.isPending ? "Creating..." : "Create Bill & Send WhatsApp"}
+                  <Button type="submit" className="w-full" disabled={addBill.isPending || isSending}>
+                    {isSending ? "Generating PDF & SMS..." : addBill.isPending ? "Creating..." : "Save Bill & Send SMS"}
                   </Button>
                 </form>
               </DialogContent>
@@ -475,12 +604,15 @@ export default function Billing() {
                               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEdit(bill)} title="Edit Bill">
                                 <Pencil className="h-3 w-3" />
                               </Button>
-                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => printInvoice(bill)}>
+                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => printInvoice(bill)} title="Print">
                                 <Printer className="h-3 w-3" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-primary" onClick={() => handleResendSMS(bill)} title="Resend SMS">
+                                <Send className="h-3 w-3" />
                               </Button>
                               {bill.status !== "Paid" && patient?.mobile && (
                                 <a href={getWhatsAppReminderLink(patient?.name || "", patient?.mobile || "", Number(bill.amount))} target="_blank" rel="noopener noreferrer">
-                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-success"><MessageCircle className="h-3 w-3" /></Button>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-success" title="WhatsApp Reminder"><MessageCircle className="h-3 w-3" /></Button>
                                 </a>
                               )}
                             </div>
