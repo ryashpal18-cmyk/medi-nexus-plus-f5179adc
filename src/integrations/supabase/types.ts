@@ -98,6 +98,7 @@ export type Database = {
           amount: number
           created_at: string
           id: string
+          invoice_pdf_url: string | null
           patient_id: string
           service: string
           status: string
@@ -107,6 +108,7 @@ export type Database = {
           amount?: number
           created_at?: string
           id?: string
+          invoice_pdf_url?: string | null
           patient_id: string
           service: string
           status?: string
@@ -116,6 +118,7 @@ export type Database = {
           amount?: number
           created_at?: string
           id?: string
+          invoice_pdf_url?: string | null
           patient_id?: string
           service?: string
           status?: string
