@@ -140,6 +140,33 @@ export type Database = {
           },
         ]
       }
+      deleted_records_log: {
+        Row: {
+          deleted_at: string
+          deleted_by: string
+          id: string
+          record_data: Json
+          record_id: string
+          table_name: string
+        }
+        Insert: {
+          deleted_at?: string
+          deleted_by: string
+          id?: string
+          record_data: Json
+          record_id: string
+          table_name: string
+        }
+        Update: {
+          deleted_at?: string
+          deleted_by?: string
+          id?: string
+          record_data?: Json
+          record_id?: string
+          table_name?: string
+        }
+        Relationships: []
+      }
       medical_history: {
         Row: {
           created_at: string
