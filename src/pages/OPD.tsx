@@ -11,9 +11,11 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Textarea } from "@/components/ui/textarea";
 import { UserPlus, Search, FileText, Printer, Download, MessageCircle, Trash2 } from "lucide-react";
 import { useState, useRef } from "react";
-import { useAddPatient, useSearchPatients, useAddPrescription, usePatients } from "@/hooks/useDatabase";
+import { useAddPatient, useSearchPatients, useAddPrescription, usePatients, useDeletePatient } from "@/hooks/useDatabase";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { openWhatsAppWeb } from "@/pages/WhatsApp";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { openWhatsAppWeb } from "@/pages/WhatsApp";
 
 const orthoAdvice: Record<string, string> = {
