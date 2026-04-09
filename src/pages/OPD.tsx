@@ -12,6 +12,7 @@ import { useState, useRef } from "react";
 import { useAddPatient, useSearchPatients, useAddPrescription, usePatients } from "@/hooks/useDatabase";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { openWhatsAppWeb } from "@/pages/WhatsApp";
 
 const orthoAdvice: Record<string, string> = {
   "Plaster Care": "प्लास्टर केयर सलाह:\n• प्लास्टर को सूखा रखें\n• उंगलियों को हिलाते रहें\n• सूजन या सुन्नपन होने पर तुरंत डॉक्टर से मिलें\n• प्लास्टर को खुद न निकालें",
