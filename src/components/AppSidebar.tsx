@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Users, BedDouble, Calendar, Receipt,
-  Activity, FileText, BarChart3, Settings, Stethoscope, LogOut
+  Activity, FileText, BarChart3, Settings, Stethoscope, LogOut, MessageCircle
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation, useNavigate } from "react-router-dom";
