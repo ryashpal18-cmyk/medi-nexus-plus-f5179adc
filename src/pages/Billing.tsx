@@ -637,9 +637,12 @@ export default function Billing() {
                                 <MessageCircle className="h-3 w-3" />
                               </Button>
                               {bill.status !== "Paid" && patient?.mobile && (
-                                <a href={getWhatsAppReminderLink(patient?.name || "", patient?.mobile || "", Number(bill.amount) - paid)} target="_blank" rel="noopener noreferrer">
-                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-warning" title="Payment Reminder"><Send className="h-3 w-3" /></Button>
-                                </a>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-warning" title="Payment Reminder" onClick={() => {
+                                  const msg = getWhatsAppReminderMessage(patient?.name || "", patient?.mobile || "", Number(bill.amount) - paid);
+                                  openWhatsAppWeb(patient?.mobile || "", msg);
+                                }}>
+                                  <Send className="h-3 w-3" />
+                                </Button>
                               )}
                             </div>
                           </td>
