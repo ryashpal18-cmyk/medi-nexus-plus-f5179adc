@@ -88,9 +88,20 @@ export default function OPD() {
   const printRef = useRef<HTMLDivElement>(null);
 
   const addPatient = useAddPatient();
+  const deletePatient = useDeletePatient();
+  const { isAdmin } = useIsAdmin();
   const { data: searchResults } = useSearchPatients(searchQuery);
   const { data: allPatients } = usePatients();
   const addPrescription = useAddPrescription();
+
+  const handleDeletePatient = async (patient: any) => {
+    try {
+      await deletePatient.mutateAsync({ id: patient.id, logData: patient });
+      toast({ title: "🗑️ Patient Deleted", description: `${patient.name} और सभी related records delete हो गए`, duration: 10000 });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
