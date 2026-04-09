@@ -5,15 +5,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Receipt, Plus, MessageCircle, Printer, Trash2, Pencil, Download, Send } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Receipt, Plus, MessageCircle, Printer, Trash2, Pencil, Download, Send, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useBills, useAddBill, usePatients, useUpdateBill } from "@/hooks/useDatabase";
-import { useState } from "react";
+import { useBills, useAddBill, usePatients, useUpdateBill, useDeleteBill } from "@/hooks/useDatabase";
+import { useState, useCallback, useRef } from "react";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import * as XLSX from "xlsx";
 import html2pdf from "html2pdf.js";
 import { openWhatsAppWeb } from "@/pages/WhatsApp";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
 
 const statusStyle: Record<string, string> = {
   Paid: "bg-success/10 text-success",
@@ -22,24 +24,11 @@ const statusStyle: Record<string, string> = {
 };
 
 const SERVICE_OPTIONS = [
-  "OPD Consultation",
-  "X-Ray",
-  "Physiotherapy",
-  "Procedure",
-  "IPD Stay",
-  "Plaster",
-  "MOT Charge",
-  "Medicine",
-  "Dressing",
-  "Injection",
-  "Blood Test",
-  "Other",
+  "OPD Consultation", "X-Ray", "Physiotherapy", "Procedure", "IPD Stay",
+  "Plaster", "MOT Charge", "Medicine", "Dressing", "Injection", "Blood Test", "Other",
 ];
 
-interface ServiceItem {
-  name: string;
-  amount: string;
-}
+interface ServiceItem { name: string; amount: string; }
 
 function getWhatsAppBillMessage(patient: string, mobile: string, amount: number, services: string, status: string, pdfUrl?: string) {
   return `🙏 Namaste ${patient},\n\nBalaji Ortho Care Center\nDr. S. S. Rathore (DMRT | BPT)\n\n📋 Bill Details:\n${services}\n\n💰 Total: ₹${amount.toLocaleString()}\n📌 Status: ${status}${pdfUrl ? `\n\n📥 Download Invoice PDF:\n${pdfUrl}` : ""}\n\n🌐 View reports & book appointment online:\nhttps://balaji-health-hub.lovable.app/\n\n📞 Contact: +91 8005707783\nDhanyawad! 🙏`;
@@ -51,6 +40,8 @@ function getWhatsAppReminderMessage(patient: string, mobile: string, amount: num
 
 function buildInvoiceHTML(bill: any, logoUrl: string = "/images/logo.png") {
   const patientName = (bill.patients as any)?.name || "Patient";
+  const patientAge = (bill.patients as any)?.age || "—";
+  const patientGender = (bill.patients as any)?.gender || "—";
   const invoiceNo = `INV-${bill.id.slice(0, 8).toUpperCase()}`;
   const date = new Date(bill.created_at).toLocaleDateString("en-IN", {
     day: "2-digit", month: "short", year: "numeric",
@@ -76,14 +67,14 @@ function buildInvoiceHTML(bill: any, logoUrl: string = "/images/logo.png") {
   return `
     <div style="
       width: 5.5in;
-      height: 4.1in;
+      min-height: 4.1in;
       box-sizing: border-box;
       position: relative;
       overflow: hidden;
       border: 1.5px solid #e0e0e0;
       border-radius: 8px;
-      background: #fff;
-      font-family: 'Inter', 'Segoe UI', sans-serif;
+      background: #ffffff;
+      font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
       page-break-inside: avoid;
     ">
       <svg style="position:absolute;top:0;left:0;width:180px;height:90px;z-index:0;" viewBox="0 0 220 120" fill="none">
@@ -98,7 +89,7 @@ function buildInvoiceHTML(bill: any, logoUrl: string = "/images/logo.png") {
       <div style="position:relative;z-index:1;padding:12px 16px 10px;">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
           <div style="display:flex;align-items:center;gap:8px;">
-            <img src="${logoUrl}" style="width:40px;height:40px;object-fit:contain;" alt="Logo" />
+            <img src="${logoUrl}" style="width:40px;height:40px;object-fit:contain;" alt="Logo" crossorigin="anonymous" />
             <div>
               <div style="font-size:13px;font-weight:800;color:#1e3a5f;">Balaji Ortho Care Center</div>
               <div style="font-size:8px;color:#475569;margin-top:1px;">Dr. S. S. Rathore (DMRT | BPT)</div>
@@ -119,6 +110,7 @@ function buildInvoiceHTML(bill: any, logoUrl: string = "/images/logo.png") {
           <div>
             <div style="font-size:7px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;">Bill To</div>
             <div style="font-size:11px;font-weight:700;color:#1e3a5f;margin-top:1px;">${patientName}</div>
+            <div style="font-size:8px;color:#64748b;">Age: ${patientAge} | Gender: ${patientGender}</div>
           </div>
           <div style="text-align:right;">
             <div style="font-size:7px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;">Status</div>
@@ -166,46 +158,32 @@ function printInvoice(bill: any) {
   const logoUrl = window.location.origin + "/images/logo.png";
   const win = window.open("", "_blank", "width=700,height=1000");
   if (!win) return;
-
-  const invoiceHTML = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="utf-8"/>
-      <title>Invoice – ${(bill.patients as any)?.name || "Patient"}</title>
-      <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Inter', sans-serif; background: #fff; }
-        @page { size: 5.5in 8.5in; margin: 5mm; }
-        @media print {
-          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-        }
-        .page {
-          width: 5.5in;
-          height: 8.5in;
-          display: flex;
-          flex-direction: column;
-          justify-content: space-between;
-          gap: 4mm;
-          padding: 2mm;
-          margin: 0 auto;
-        }
-      </style>
-    </head>
-    <body>
-      <div class="page">
-        ${buildInvoiceHTML(bill, logoUrl)}
-        ${buildInvoiceHTML(bill, logoUrl)}
-      </div>
-      <script>
-        window.onload = function() { window.print(); };
-      </script>
-    </body>
-    </html>
-  `;
-
+  const invoiceHTML = `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Invoice – ${(bill.patients as any)?.name || "Patient"}</title>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { font-family: 'Inter', sans-serif; background: #fff; }
+      @page { size: 5.5in 8.5in; margin: 5mm; }
+      @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+      .page { width: 5.5in; height: 8.5in; display: flex; flex-direction: column; justify-content: space-between; gap: 4mm; padding: 2mm; margin: 0 auto; }
+    </style></head><body>
+    <div class="page">${buildInvoiceHTML(bill, logoUrl)}${buildInvoiceHTML(bill, logoUrl)}</div>
+    <script>window.onload = function() { window.print(); };</script></body></html>`;
   win.document.write(invoiceHTML);
+  win.document.close();
+}
+
+function previewInvoice(bill: any) {
+  const logoUrl = window.location.origin + "/images/logo.png";
+  const win = window.open("", "_blank", "width=700,height=900");
+  if (!win) return;
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Preview – ${(bill.patients as any)?.name || "Patient"}</title>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { font-family: 'Inter', sans-serif; background: #f1f5f9; display:flex; justify-content:center; padding:20px; }
+    </style></head><body>${buildInvoiceHTML(bill, logoUrl)}</body></html>`;
+  win.document.write(html);
   win.document.close();
 }
 
@@ -213,19 +191,50 @@ async function generateAndUploadPDF(bill: any): Promise<string | null> {
   const logoUrl = window.location.origin + "/images/logo.png";
   const html = buildInvoiceHTML(bill, logoUrl);
 
+  // Create a visible container temporarily to ensure proper rendering
   const container = document.createElement("div");
   container.innerHTML = html;
-  container.style.position = "absolute";
-  container.style.left = "-9999px";
+  container.style.position = "fixed";
+  container.style.top = "0";
+  container.style.left = "0";
+  container.style.zIndex = "-9999";
+  container.style.opacity = "0.01";
+  container.style.width = "5.5in";
+  container.style.background = "#ffffff";
   document.body.appendChild(container);
+
+  // Wait for images to load
+  const images = container.querySelectorAll("img");
+  await Promise.all(
+    Array.from(images).map(
+      (img) =>
+        new Promise<void>((resolve) => {
+          if (img.complete) { resolve(); return; }
+          img.onload = () => resolve();
+          img.onerror = () => resolve();
+          setTimeout(resolve, 3000);
+        })
+    )
+  );
+
+  // Small delay for fonts and rendering
+  await new Promise((r) => setTimeout(r, 500));
 
   try {
     const pdfBlob = await html2pdf()
       .set({
-        margin: 2,
-        filename: `invoice.pdf`,
+        margin: [2, 2, 2, 2],
+        filename: "invoice.pdf",
         image: { type: "jpeg", quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true },
+        html2canvas: {
+          scale: 3,
+          useCORS: true,
+          allowTaint: true,
+          logging: false,
+          backgroundColor: "#ffffff",
+          width: container.scrollWidth,
+          height: container.scrollHeight,
+        },
         jsPDF: { unit: "in", format: [5.5, 8.5], orientation: "portrait" },
       })
       .from(container)
@@ -244,7 +253,6 @@ async function generateAndUploadPDF(bill: any): Promise<string | null> {
     }
 
     const { data: urlData } = supabase.storage.from("invoices").getPublicUrl(fileName);
-
     await supabase.from("billing").update({ invoice_pdf_url: urlData.publicUrl } as any).eq("id", bill.id);
 
     return urlData.publicUrl;
@@ -261,6 +269,8 @@ export default function Billing() {
   const { data: patients } = usePatients();
   const addBill = useAddBill();
   const updateBill = useUpdateBill();
+  const deleteBill = useDeleteBill();
+  const { isAdmin } = useIsAdmin();
   const [open, setOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editingBill, setEditingBill] = useState<any>(null);
@@ -269,6 +279,7 @@ export default function Billing() {
   const [amountPaid, setAmountPaid] = useState("");
   const [paymentMode, setPaymentMode] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const addServiceRow = () => setServices(prev => [...prev, { name: "", amount: "" }]);
   const removeServiceRow = (idx: number) => setServices(prev => prev.filter((_, i) => i !== idx));
@@ -285,6 +296,34 @@ export default function Billing() {
     if (paidNum >= totalAmount) return "Paid";
     return "Partial";
   };
+
+  const handleDeleteBill = useCallback(async (bill: any) => {
+    try {
+      // Delete PDF from storage if exists
+      const pdfUrl = (bill as any).invoice_pdf_url;
+      if (pdfUrl) {
+        const urlParts = pdfUrl.split("/invoices/");
+        if (urlParts[1]) {
+          await supabase.storage.from("invoices").remove([urlParts[1]]);
+        }
+      }
+
+      await deleteBill.mutateAsync({ id: bill.id, logData: bill });
+
+      const { dismiss } = toast({
+        title: "🗑️ Bill Deleted",
+        description: (
+          <div className="flex items-center gap-2">
+            <span>Invoice deleted successfully</span>
+          </div>
+        ),
+        duration: 10000,
+      });
+
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  }, [deleteBill]);
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -308,7 +347,6 @@ export default function Billing() {
 
       toast({ title: "Bill Created", description: "Generating PDF & sending WhatsApp..." });
 
-      // Generate PDF and upload
       const pdfUrl = await generateAndUploadPDF(result);
       const patient = (result.patients as any);
       const patientName = patient?.name || "Patient";
@@ -393,7 +431,6 @@ export default function Billing() {
         payment_mode: paymentMode || null,
       } as any);
 
-      // Re-generate PDF after edit
       const updatedBill = { ...editingBill, service: serviceStr, amount: newTotal, status, amount_paid: paidNum, payment_mode: paymentMode };
       const pdfUrl = await generateAndUploadPDF(updatedBill);
 
@@ -467,13 +504,7 @@ export default function Billing() {
                 {SERVICE_OPTIONS.map(opt => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}
               </SelectContent>
             </Select>
-            <Input
-              type="number"
-              placeholder="₹"
-              className="w-24 h-9"
-              value={s.amount}
-              onChange={e => updateService(idx, "amount", e.target.value)}
-            />
+            <Input type="number" placeholder="₹" className="w-24 h-9" value={s.amount} onChange={e => updateService(idx, "amount", e.target.value)} />
             {services.length > 1 && (
               <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeServiceRow(idx)}>
                 <Trash2 className="h-3 w-3" />
@@ -627,6 +658,9 @@ export default function Billing() {
                           </td>
                           <td className="py-3 text-right">
                             <div className="flex justify-end gap-1">
+                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => previewInvoice(bill)} title="Preview Invoice">
+                                <Eye className="h-3 w-3" />
+                              </Button>
                               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEdit(bill)} title="Edit Bill">
                                 <Pencil className="h-3 w-3" />
                               </Button>
@@ -643,6 +677,29 @@ export default function Billing() {
                                 }}>
                                   <Send className="h-3 w-3" />
                                 </Button>
+                              )}
+                              {isAdmin && (
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" title="Delete Bill">
+                                      <Trash2 className="h-3 w-3" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Are you sure you want to delete this invoice?</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        {patient?.name} का invoice (₹{Number(bill.amount).toLocaleString()}) permanently delete हो जाएगा। PDF file भी delete होगी।
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                      <AlertDialogAction onClick={() => handleDeleteBill(bill)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                        Delete Invoice
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
                               )}
                             </div>
                           </td>
