@@ -13,6 +13,7 @@ import Physiotherapy from "./pages/Physiotherapy";
 import Reports from "./pages/Reports";
 import Analytics from "./pages/Analytics";
 import SettingsPage from "./pages/SettingsPage";
+import WhatsApp from "./pages/WhatsApp";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 
