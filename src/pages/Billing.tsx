@@ -13,6 +13,7 @@ import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import * as XLSX from "xlsx";
 import html2pdf from "html2pdf.js";
+import { openWhatsAppWeb } from "@/pages/WhatsApp";
 
 const statusStyle: Record<string, string> = {
   Paid: "bg-success/10 text-success",
