@@ -20,6 +20,7 @@ const menuItems = [
   { title: "Physiotherapy", url: "/physiotherapy", icon: Activity },
   { title: "Reports / X-Ray", url: "/reports", icon: FileText },
   { title: "Analytics", url: "/analytics", icon: BarChart3 },
+  { title: "WhatsApp", url: "/whatsapp", icon: MessageCircle },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
 
