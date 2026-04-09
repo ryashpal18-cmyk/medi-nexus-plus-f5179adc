@@ -108,10 +108,8 @@ export default function OPD() {
 
       // Send WhatsApp welcome message
       if (regForm.mobile) {
-        const cleanMobile = regForm.mobile.replace(/\D/g, "").replace(/^91/, "");
         const welcomeMsg = `🙏 Namaste ${regForm.name},\n\nBalaji Ortho Care Center में आपका स्वागत है!\n\n👨‍⚕️ Dr. S. S. Rathore (DMRT | BPT)\n📍 Opp Govt Hospital, Bay Pass Road, Khinwara, Raj. – 306502\n📞 +91 8005707783\n\n🌐 Online Reports & Appointments:\nhttps://balaji-health-hub.lovable.app/\n\nधन्यवाद! 🙏`;
-        const waUrl = `https://wa.me/91${cleanMobile}?text=${encodeURIComponent(welcomeMsg)}`;
-        window.open(waUrl, "_blank");
+        openWhatsAppWeb(regForm.mobile, welcomeMsg);
       }
 
       setRegForm({ name: "", mobile: "", age: "", gender: "", address: "" });
