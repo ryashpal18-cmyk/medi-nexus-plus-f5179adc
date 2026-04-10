@@ -285,11 +285,18 @@ export default function Billing() {
   const [editOpen, setEditOpen] = useState(false);
   const [editingBill, setEditingBill] = useState<any>(null);
   const [selectedPatient, setSelectedPatient] = useState("");
+  const [patientSearch, setPatientSearch] = useState("");
   const [services, setServices] = useState<ServiceItem[]>([{ name: "", amount: "" }]);
   const [amountPaid, setAmountPaid] = useState("");
   const [paymentMode, setPaymentMode] = useState("");
   const [isSending, setIsSending] = useState(false);
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const filteredPatients = patients?.filter(p => {
+    if (!patientSearch) return true;
+    const q = patientSearch.toLowerCase();
+    return p.name?.toLowerCase().includes(q) || p.mobile?.includes(patientSearch.replace(/\D/g, ""));
+  });
 
   const addServiceRow = () => setServices(prev => [...prev, { name: "", amount: "" }]);
   const removeServiceRow = (idx: number) => setServices(prev => prev.filter((_, i) => i !== idx));
@@ -571,7 +578,7 @@ export default function Billing() {
             <Button variant="outline" className="gap-2" onClick={exportToExcel}>
               <Download className="h-4 w-4" /> Excel Export
             </Button>
-            <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setServices([{ name: "", amount: "" }]); setAmountPaid(""); setPaymentMode(""); } }}>
+            <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setServices([{ name: "", amount: "" }]); setAmountPaid(""); setPaymentMode(""); setPatientSearch(""); } }}>
               <DialogTrigger asChild>
                 <Button className="gap-2"><Plus className="h-4 w-4" />New Bill</Button>
               </DialogTrigger>
@@ -579,11 +586,18 @@ export default function Billing() {
                 <DialogHeader><DialogTitle className="font-heading">New Bill</DialogTitle></DialogHeader>
                 <form onSubmit={handleAdd} className="space-y-4">
                   <div className="space-y-2">
-                    <Label>Patient</Label>
+                    <Label>Patient (Search by name or mobile)</Label>
+                    <Input
+                      placeholder="🔍 Type name or mobile number..."
+                      value={patientSearch}
+                      onChange={e => setPatientSearch(e.target.value)}
+                      className="mb-2"
+                    />
                     <Select value={selectedPatient} onValueChange={setSelectedPatient}>
                       <SelectTrigger><SelectValue placeholder="Select patient" /></SelectTrigger>
                       <SelectContent>
-                        {patients?.map(p => <SelectItem key={p.id} value={p.id}>{p.name} {p.mobile ? `(${p.mobile})` : ""}</SelectItem>)}
+                        {filteredPatients?.map(p => <SelectItem key={p.id} value={p.id}>{p.name} ({p.mobile || "No mobile"})</SelectItem>)}
+                        {filteredPatients?.length === 0 && <div className="px-3 py-2 text-xs text-muted-foreground">No patients found</div>}
                       </SelectContent>
                     </Select>
                   </div>
