@@ -285,11 +285,18 @@ export default function Billing() {
   const [editOpen, setEditOpen] = useState(false);
   const [editingBill, setEditingBill] = useState<any>(null);
   const [selectedPatient, setSelectedPatient] = useState("");
+  const [patientSearch, setPatientSearch] = useState("");
   const [services, setServices] = useState<ServiceItem[]>([{ name: "", amount: "" }]);
   const [amountPaid, setAmountPaid] = useState("");
   const [paymentMode, setPaymentMode] = useState("");
   const [isSending, setIsSending] = useState(false);
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const filteredPatients = patients?.filter(p => {
+    if (!patientSearch) return true;
+    const q = patientSearch.toLowerCase();
+    return p.name?.toLowerCase().includes(q) || p.mobile?.includes(patientSearch.replace(/\D/g, ""));
+  });
 
   const addServiceRow = () => setServices(prev => [...prev, { name: "", amount: "" }]);
   const removeServiceRow = (idx: number) => setServices(prev => prev.filter((_, i) => i !== idx));
