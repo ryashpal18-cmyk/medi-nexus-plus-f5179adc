@@ -83,6 +83,8 @@ export default function OPD() {
   const [advice, setAdvice] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [regForm, setRegForm] = useState({ name: "", mobile: "", age: "", gender: "", address: "" });
+  const [existingPatient, setExistingPatient] = useState<any>(null);
+  const [mobileSearchStatus, setMobileSearchStatus] = useState<"idle" | "searching" | "found" | "new">("idle");
   const [rxForm, setRxForm] = useState({ patient_id: "", diagnosis: "", medicines: "", followup_date: "" });
   const [isExporting, setIsExporting] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
@@ -93,6 +95,42 @@ export default function OPD() {
   const { data: searchResults } = useSearchPatients(searchQuery);
   const { data: allPatients } = usePatients();
   const addPrescription = useAddPrescription();
+
+  // Auto-search patient by mobile number
+  const handleMobileChange = async (mobile: string) => {
+    setRegForm(p => ({ ...p, mobile }));
+    setExistingPatient(null);
+    setMobileSearchStatus("idle");
+
+    const cleanMobile = mobile.replace(/\D/g, "");
+    if (cleanMobile.length >= 10) {
+      setMobileSearchStatus("searching");
+      try {
+        const { data, error } = await supabase
+          .from("patients")
+          .select("*")
+          .or(`mobile.eq.${cleanMobile},mobile.eq.+91${cleanMobile},mobile.ilike.%${cleanMobile.slice(-10)}%`)
+          .limit(1);
+
+        if (!error && data && data.length > 0) {
+          const patient = data[0];
+          setExistingPatient(patient);
+          setRegForm({
+            mobile,
+            name: patient.name || "",
+            age: patient.age?.toString() || "",
+            gender: patient.gender || "",
+            address: patient.address || "",
+          });
+          setMobileSearchStatus("found");
+        } else {
+          setMobileSearchStatus("new");
+        }
+      } catch {
+        setMobileSearchStatus("new");
+      }
+    }
+  };
 
   const handleDeletePatient = async (patient: any) => {
     try {
@@ -105,19 +143,39 @@ export default function OPD() {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!regForm.name || !regForm.mobile) {
-      toast({ title: "Error", description: "Name and mobile are required", variant: "destructive" });
+    if (!regForm.mobile) {
+      toast({ title: "Error", description: "Mobile number is required", variant: "destructive" });
       return;
     }
+    if (!regForm.name) {
+      toast({ title: "Error", description: "Name is required", variant: "destructive" });
+      return;
+    }
+
     try {
-      await addPatient.mutateAsync({
-        name: regForm.name,
-        mobile: regForm.mobile,
-        age: regForm.age ? parseInt(regForm.age) : null,
-        gender: regForm.gender || null,
-        address: regForm.address || null,
-      });
-      toast({ title: "Success", description: "Patient registered successfully!" });
+      let patientId = existingPatient?.id;
+
+      if (existingPatient) {
+        // Update existing patient details if changed
+        await supabase.from("patients").update({
+          name: regForm.name,
+          age: regForm.age ? parseInt(regForm.age) : null,
+          gender: regForm.gender || null,
+          address: regForm.address || null,
+        }).eq("id", existingPatient.id);
+        toast({ title: "✅ Patient Found", description: `${regForm.name} already registered — details updated` });
+      } else {
+        // Create new patient
+        const result = await addPatient.mutateAsync({
+          name: regForm.name,
+          mobile: regForm.mobile.replace(/\D/g, ""),
+          age: regForm.age ? parseInt(regForm.age) : null,
+          gender: regForm.gender || null,
+          address: regForm.address || null,
+        });
+        patientId = result.id;
+        toast({ title: "🆕 New Patient Registered", description: `${regForm.name} successfully registered!` });
+      }
 
       // Send WhatsApp welcome message
       if (regForm.mobile) {
@@ -126,6 +184,8 @@ export default function OPD() {
       }
 
       setRegForm({ name: "", mobile: "", age: "", gender: "", address: "" });
+      setExistingPatient(null);
+      setMobileSearchStatus("idle");
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     }
@@ -322,41 +382,61 @@ export default function OPD() {
               <CardHeader>
                 <CardTitle className="font-heading text-lg flex items-center gap-2">
                   <UserPlus className="h-5 w-5 text-primary" />
-                  New Patient Registration
+                  Patient Registration
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <form onSubmit={handleRegister} className="grid sm:grid-cols-2 gap-4">
+                <form onSubmit={handleRegister} className="space-y-4">
+                  {/* Mobile Number FIRST */}
                   <div className="space-y-2">
-                    <Label>Patient Name *</Label>
-                    <Input placeholder="Enter full name" value={regForm.name} onChange={e => setRegForm(p => ({ ...p, name: e.target.value }))} required />
+                    <Label>Mobile Number * (पहले मोबाइल नंबर डालें)</Label>
+                    <Input
+                      placeholder="10 digit mobile number"
+                      value={regForm.mobile}
+                      onChange={e => handleMobileChange(e.target.value)}
+                      required
+                      className="text-lg font-medium"
+                      maxLength={13}
+                    />
+                    {mobileSearchStatus === "searching" && (
+                      <p className="text-xs text-muted-foreground animate-pulse">🔍 Searching patient...</p>
+                    )}
+                    {mobileSearchStatus === "found" && (
+                      <p className="text-xs text-green-600 font-medium">✅ Patient already registered — details auto-filled</p>
+                    )}
+                    {mobileSearchStatus === "new" && (
+                      <p className="text-xs text-blue-600 font-medium">🆕 New Patient — please fill details below</p>
+                    )}
                   </div>
-                  <div className="space-y-2">
-                    <Label>Mobile Number *</Label>
-                    <Input placeholder="+91 XXXXX XXXXX" value={regForm.mobile} onChange={e => setRegForm(p => ({ ...p, mobile: e.target.value }))} required />
+
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Patient Name *</Label>
+                      <Input placeholder="Enter full name" value={regForm.name} onChange={e => setRegForm(p => ({ ...p, name: e.target.value }))} required />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Age</Label>
+                      <Input type="number" placeholder="Age" value={regForm.age} onChange={e => setRegForm(p => ({ ...p, age: e.target.value }))} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Gender</Label>
+                      <Select value={regForm.gender} onValueChange={v => setRegForm(p => ({ ...p, gender: v }))}>
+                        <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="male">Male</SelectItem>
+                          <SelectItem value="female">Female</SelectItem>
+                          <SelectItem value="other">Other</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Address</Label>
+                      <Input placeholder="Village / Address" value={regForm.address} onChange={e => setRegForm(p => ({ ...p, address: e.target.value }))} />
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label>Age</Label>
-                    <Input type="number" placeholder="Age" value={regForm.age} onChange={e => setRegForm(p => ({ ...p, age: e.target.value }))} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Gender</Label>
-                    <Select value={regForm.gender} onValueChange={v => setRegForm(p => ({ ...p, gender: v }))}>
-                      <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="male">Male</SelectItem>
-                        <SelectItem value="female">Female</SelectItem>
-                        <SelectItem value="other">Other</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="sm:col-span-2 space-y-2">
-                    <Label>Address</Label>
-                    <Textarea placeholder="Full address" value={regForm.address} onChange={e => setRegForm(p => ({ ...p, address: e.target.value }))} />
-                  </div>
-                  <div className="sm:col-span-2">
+                  <div>
                     <Button type="submit" disabled={addPatient.isPending} className="w-full sm:w-auto">
-                      {addPatient.isPending ? "Registering..." : "Register Patient"}
+                      {addPatient.isPending ? "Saving..." : existingPatient ? "✅ Update & Continue" : "🆕 Register New Patient"}
                     </Button>
                   </div>
                 </form>
