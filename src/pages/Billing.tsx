@@ -187,8 +187,18 @@ function previewInvoice(bill: any) {
   win.document.close();
 }
 
+async function getBase64Image(url: string): Promise<string> {
+  const res = await fetch(url);
+  const blob = await res.blob();
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.readAsDataURL(blob);
+  });
+}
+
 async function generateAndUploadPDF(bill: any): Promise<string | null> {
-  const logoUrl = window.location.origin + "/images/logo.png";
+  const logoUrl = await getBase64Image(window.location.origin + "/images/logo.png");
   const html = buildInvoiceHTML(bill, logoUrl);
 
   // Create a visible container temporarily to ensure proper rendering

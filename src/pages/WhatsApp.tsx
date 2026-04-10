@@ -48,7 +48,7 @@ export function openWhatsAppWeb(mobile: string, message: string) {
   const cleanMobile = mobile?.replace(/\D/g, "") || "";
   const num = cleanMobile.startsWith("91") ? cleanMobile : `91${cleanMobile}`;
   const url = `https://web.whatsapp.com/send?phone=${num}&text=${encodeURIComponent(message)}`;
-  window.open(url, "whatsapp_web", "width=1000,height=700,scrollbars=yes,resizable=yes");
+  window.open(url, "whatsapp_web_window", "width=1000,height=700,scrollbars=yes,resizable=yes");
 }
 
 export default function WhatsApp() {
