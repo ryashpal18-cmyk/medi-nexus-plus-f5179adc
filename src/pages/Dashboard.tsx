@@ -1,7 +1,7 @@
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { StatCard } from "@/components/StatCard";
 import {
-  Users, Calendar, Receipt, FileText, Activity, AlertTriangle,
+  Users, Calendar, Receipt, FileText, Activity, UserPlus,
   Stethoscope, BedDouble, TrendingUp, Clock, IndianRupee, MessageCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -43,9 +43,9 @@ export default function Dashboard() {
               </p>
             </div>
           </div>
-          <Button className="emergency-btn gap-2 w-fit" onClick={() => navigate("/ipd")}>
-            <AlertTriangle className="h-4 w-4" />
-            Emergency Admission
+          <Button className="emergency-btn gap-2 w-fit" onClick={() => navigate("/opd")}>
+            <UserPlus className="h-4 w-4" />
+            New Patient Admission
           </Button>
         </div>
 
@@ -166,7 +166,7 @@ export default function Dashboard() {
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base font-heading flex items-center gap-2 text-warning">
-                  <AlertTriangle className="h-4 w-4" />
+                  <Receipt className="h-4 w-4" />
                   Pending Dues ({pendingBills.length} patients) — ₹{pendingTotal.toLocaleString()}
                 </CardTitle>
                 <Button variant="ghost" size="sm" className="text-primary text-xs" onClick={() => navigate("/billing")}>View All</Button>

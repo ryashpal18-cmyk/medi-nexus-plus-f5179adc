@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { UserPlus, Search, FileText, Printer, Download, MessageCircle, Trash2 } from "lucide-react";
 import { useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAddPatient, useSearchPatients, useAddPrescription, usePatients, useDeletePatient } from "@/hooks/useDatabase";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -80,6 +81,7 @@ function buildPrescriptionHTML(patient: any, rxForm: any, advice: string) {
 }
 
 export default function OPD() {
+  const navigate = useNavigate();
   const [advice, setAdvice] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [regForm, setRegForm] = useState({ name: "", mobile: "", age: "", gender: "", address: "" });
@@ -177,11 +179,11 @@ export default function OPD() {
         toast({ title: "🆕 New Patient Registered", description: `${regForm.name} successfully registered!` });
       }
 
-      // Send WhatsApp welcome message
-      if (regForm.mobile) {
-        const welcomeMsg = `🙏 Namaste ${regForm.name},\n\nBalaji Ortho Care Center में आपका स्वागत है!\n\n👨‍⚕️ Dr. S. S. Rathore (DMRT | BPT)\n📍 Opp Govt Hospital, Bay Pass Road, Khinwara, Raj. – 306502\n📞 +91 8005707783\n\n🌐 Online Reports & Appointments:\nhttps://balaji-health-hub.lovable.app/\n\nधन्यवाद! 🙏`;
-        openWhatsAppWeb(regForm.mobile, welcomeMsg);
-      }
+      // Navigate to billing page directly after registration
+      toast({ title: "✅ Redirecting to Billing", description: "Patient saved — opening billing page..." });
+      setTimeout(() => {
+        navigate("/billing", { state: { patientId: patientId, patientName: regForm.name } });
+      }, 500);
 
       setRegForm({ name: "", mobile: "", age: "", gender: "", address: "" });
       setExistingPatient(null);
