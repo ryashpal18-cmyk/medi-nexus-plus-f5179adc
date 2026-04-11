@@ -166,7 +166,7 @@ export default function Dashboard() {
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base font-heading flex items-center gap-2 text-warning">
-                  <AlertTriangle className="h-4 w-4" />
+                  <Receipt className="h-4 w-4" />
                   Pending Dues ({pendingBills.length} patients) — ₹{pendingTotal.toLocaleString()}
                 </CardTitle>
                 <Button variant="ghost" size="sm" className="text-primary text-xs" onClick={() => navigate("/billing")}>View All</Button>
