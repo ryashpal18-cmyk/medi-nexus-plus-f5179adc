@@ -20,7 +20,7 @@ function createWindow() {
     if (!fs.existsSync(dataFolder)) {
         try {
             fs.mkdirSync(dataFolder, { recursive: true });
-        } catch (e) { console.log(e); }
+        } catch (e) { console.log("Folder error:", e); }
     }
 }
 
@@ -28,7 +28,9 @@ ipcMain.on('save-offline-data', (event, data) => {
     const filePath = path.join(dataFolder, 'patient_records.json');
     let records = [];
     if (fs.existsSync(filePath)) {
-        records = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        try {
+            records = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        } catch (e) { records = []; }
     }
     records.push({ ...data, timestamp: new Date().toISOString() });
     fs.writeFileSync(filePath, JSON.stringify(records, null, 2));
