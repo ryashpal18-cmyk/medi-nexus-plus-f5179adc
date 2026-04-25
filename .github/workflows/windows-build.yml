@@ -1,4 +1,4 @@
-name: Build-Windows-EXE
+name: Windows-Build
 on: [push]
 jobs:
   build:
@@ -16,5 +16,5 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v3
         with:
-          name: Medi-Nexus-Software
+          name: Medi-Nexus-EXE
           path: dist/*.exe
