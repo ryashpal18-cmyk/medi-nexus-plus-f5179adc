@@ -6,7 +6,7 @@ const VIEWS = ["AP", "PA", "Lateral", "Oblique", "Axial", "MRI", "Ultrasound", "
 const CLINIC_NAME = "Balaji Ortho Care Center";
 const UPI_ID = "ryashpal18@okicici";
 const REPORT_FEE = 50;
-const GEMINI_KEY = "AIzaSyCMdDhIngOpJct5e7YQ5Zz39Qr3zx7m10s";
+const GEMINI_KEY = "AIzaSyDGbf1G2Q7n70Rx6kaYj9X44iEAWJl4BY8";
 
 type AIReport = {
   studyType?: string;
