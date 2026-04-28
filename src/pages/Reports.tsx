@@ -1,3 +1,4 @@
+import AIXrayReport from "@/components/AIXrayReport";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,7 +12,6 @@ import { useXrayReports, useAddXrayReport, usePatients } from "@/hooks/useDataba
 import { supabase } from "@/integrations/supabase/client";
 import { useState } from "react";
 import { toast } from "@/hooks/use-toast";
-import AIXrayReport from "@/components/AIXrayReport";
 
 const typeIcon: Record<string, string> = {
   "X-Ray": "bg-primary/10 text-primary",
