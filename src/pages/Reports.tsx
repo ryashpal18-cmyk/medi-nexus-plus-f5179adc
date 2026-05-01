@@ -142,30 +142,47 @@ verified by a qualified doctor.
 If the image is NOT a medical X-ray, respond ONLY with:
 ERROR: Please upload a clear medical X-ray image.`;
 
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    console.log("[Gemini] Request URL:", geminiUrl.replace(apiKey, "***"));
+
     try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [
-                  { inline_data: { mime_type: mimeType, data: base64Image } },
-                  { text: promptText },
-                ],
-              },
-            ],
-            generationConfig: { temperature: 0.1, maxOutputTokens: 2000 },
-          }),
-        }
-      );
+      const res = await fetch(geminiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                { inline_data: { mime_type: mimeType, data: base64Image } },
+                { text: promptText },
+              ],
+            },
+          ],
+          generationConfig: { temperature: 0.1, maxOutputTokens: 2000 },
+        }),
+      });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data?.error?.message || "Gemini API error");
+      console.log("[Gemini] HTTP status:", res.status);
+      console.log("[Gemini] Raw response:", data);
+
+      if (!res.ok) {
+        console.error("[Gemini] API error response:", data);
+        throw new Error(data?.error?.message || `HTTP ${res.status}`);
+      }
+
+      console.log("[Gemini] Finish reason:", data?.candidates?.[0]?.finishReason);
+      console.log("[Gemini] Usage:", data?.usageMetadata);
 
       const text: string = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      console.log("[Gemini] Text length:", text.length);
+
+      if (!text) {
+        throw new Error(
+          "Empty response from Gemini. Finish reason: " +
+            (data?.candidates?.[0]?.finishReason || "unknown")
+        );
+      }
 
       if (text.trim().startsWith("ERROR:")) {
         setError("Please upload a clear medical X-ray image.");
@@ -174,7 +191,9 @@ ERROR: Please upload a clear medical X-ray image.`;
         setReport(text.trim());
       }
     } catch (e) {
-      setError("Failed to generate report: " + (e instanceof Error ? e.message : "Unknown error"));
+      const msg = e instanceof Error ? e.message : "Unknown error";
+      console.error("[Gemini] Exact error message:", msg, e);
+      setError("Failed to generate report: " + msg);
     } finally {
       setLoading(false);
     }
