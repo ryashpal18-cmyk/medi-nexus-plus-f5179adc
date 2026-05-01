@@ -98,11 +98,7 @@ export default function Reports() {
       return;
     }
 
-    const apiKey = import.meta.env.VITE_GEMINI_KEY;
-    if (!apiKey) {
-      setError("Gemini API key not configured. Please contact administrator.");
-      return;
-    }
+    const apiKey = "AIzaSyAgjZw9QfzT7ESgFz2qzo-bIM1g7hbdYzw";
 
     setLoading(true);
     setError(null);
