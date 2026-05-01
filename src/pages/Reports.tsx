@@ -1,190 +1,463 @@
+import { useState, useRef } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Upload, FileText, Image, Download } from "lucide-react";
-import { useXrayReports, useAddXrayReport, usePatients } from "@/hooks/useDatabase";
-import { supabase } from "@/integrations/supabase/client";
-import { useState } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Loader2, Download, RotateCcw, Sparkles, AlertCircle, Upload } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import AIXrayReport from "@/components/AIXrayReport";
 
-const typeIcon: Record<string, string> = {
-  "X-Ray": "bg-primary/10 text-primary",
-  "MRI": "bg-secondary/10 text-secondary",
-  "Lab Report": "bg-success/10 text-success",
-  "Prescription": "bg-warning/10 text-warning",
+const CLINIC = {
+  name: "Balaji Ortho Care Center",
+  doctor: "Dr. S. S. Rathore (DMRT | BPT)",
+  address: "Opp Govt Hospital, Bay Pass Road, Khinwara, Raj. – 306502",
+  phone: "+91 8005707783",
 };
 
-function printSavedAiReport(savedReport: any) {
-  const data = JSON.parse(savedReport.report_data || "{}");
-  const date = new Date(savedReport.created_at || savedReport.uploaded_at).toLocaleDateString("en-IN");
-  const win = window.open("", "_blank", "width=800,height=1000");
-  if (!win) return;
-  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>AI X-Ray Report</title><style>body{font-family:Arial,sans-serif;color:#0f172a;padding:24px}.header{border-bottom:3px solid #0891b2;padding-bottom:12px;margin-bottom:18px}.clinic{font-size:24px;font-weight:800;color:#1e3a5f}.muted{color:#64748b;font-size:13px}.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin:16px 0}.box{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px}.section{margin:16px 0}.section h3{color:#0891b2;margin-bottom:6px}.impression{border-left:5px solid #0891b2;background:#f0f9ff;padding:12px;border-radius:8px}pre{white-space:pre-wrap;font-family:inherit}@media print{button{display:none}}</style></head><body><div class="header"><div class="clinic">Balaji Ortho Care Center</div><div class="muted">Dr. S. S. Rathore (DMRT | BPT) · Opp Govt Hospital, Bay Pass Road, Khinwara, Raj. – 306502</div><div class="muted">Phone: +91 8005707783</div></div><h2>🩻 AI X-Ray Report</h2><div class="grid"><div class="box"><span class="muted">Patient</span><br/><b>${savedReport.patient_name || "Unknown"}</b></div><div class="box"><span class="muted">Date</span><br/><b>${date}</b></div><div class="box"><span class="muted">Body Part</span><br/><b>${savedReport.body_part || data.bodyPartDetected || "—"}</b></div><div class="box"><span class="muted">View</span><br/><b>${savedReport.view_projection || "—"}</b></div><div class="box"><span class="muted">Study Type</span><br/><b>${data.studyType || "—"}</b></div><div class="box"><span class="muted">Urgency</span><br/><b>${data.urgency || "Routine"}</b></div></div><div class="section"><h3>Findings</h3><pre>${data.findings?.overall || "—"}</pre>${data.findings?.bones ? `<p><b>Bones:</b> ${data.findings.bones}</p>` : ""}${data.findings?.softTissues ? `<p><b>Soft Tissues:</b> ${data.findings.softTissues}</p>` : ""}${data.findings?.specificFindings ? `<p><b>Specific:</b> ${data.findings.specificFindings}</p>` : ""}</div><div class="section impression"><h3>Impression</h3><pre>${data.impression || "—"}</pre></div>${data.recommendations ? `<div class="section"><h3>Recommendations</h3><p>${data.recommendations}</p></div>` : ""}<p class="muted">AI report sirf reference ke liye hai.</p><button onclick="window.print()">Print</button><script>window.onload=function(){window.print()}</script></body></html>`);
-  win.document.close();
+const COLORS = {
+  primary: "#1a5fa8",
+  accent: "#00bcd4",
+  text: "#333",
+};
+
+function fileToBase64(file: File): Promise<{ base64: string; mime: string }> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || "");
+      const base64 = result.split(",")[1] || "";
+      resolve({ base64, mime: file.type || "image/jpeg" });
+    };
+    reader.onerror = () => reject(new Error("Failed to read image"));
+    reader.readAsDataURL(file);
+  });
 }
 
 export default function Reports() {
-  const { data: reports, isLoading } = useXrayReports();
-  const { data: patients } = usePatients();
-  const addReport = useAddXrayReport();
-  const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ patient_id: "", report_type: "X-Ray" });
-  const [file, setFile] = useState<File | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [selectedSavedReport, setSelectedSavedReport] = useState<any>(null);
-  const savedAiReports = reports?.filter((r: any) => r.report_data) || [];
+  const [name, setName] = useState("");
+  const [age, setAge] = useState("");
+  const [studyName, setStudyName] = useState("");
+  const [complaint, setComplaint] = useState("");
+  const [side, setSide] = useState("");
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [base64Image, setBase64Image] = useState<string | null>(null);
+  const [mimeType, setMimeType] = useState<string>("image/jpeg");
+  const [loading, setLoading] = useState(false);
+  const [report, setReport] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [reportDate, setReportDate] = useState<string>("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleUpload = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.patient_id || !file) {
-      toast({ title: "Error", description: "Select patient and file", variant: "destructive" });
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!["image/jpeg", "image/jpg", "image/png"].includes(file.type)) {
+      toast({ title: "Invalid file", description: "Only JPG and PNG images are allowed.", variant: "destructive" });
       return;
     }
-    setUploading(true);
+
     try {
-      const filePath = `${form.patient_id}/${Date.now()}_${file.name}`;
-      const { error: uploadError } = await supabase.storage.from("xray-files").upload(filePath, file);
-      if (uploadError) throw uploadError;
-
-      const { data: urlData } = supabase.storage.from("xray-files").getPublicUrl(filePath);
-
-      await addReport.mutateAsync({
-        patient_id: form.patient_id,
-        file_url: urlData.publicUrl,
-        report_type: form.report_type,
-      });
-      toast({ title: "Success", description: "Report uploaded!" });
-      setForm({ patient_id: "", report_type: "X-Ray" });
-      setFile(null);
-      setOpen(false);
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    } finally {
-      setUploading(false);
+      const { base64, mime } = await fileToBase64(file);
+      setImageFile(file);
+      setBase64Image(base64);
+      setMimeType(mime);
+      setImagePreview(`data:${mime};base64,${base64}`);
+      setError(null);
+    } catch {
+      toast({ title: "Error", description: "Could not process image.", variant: "destructive" });
     }
+  };
+
+  const handleReset = () => {
+    setName("");
+    setAge("");
+    setStudyName("");
+    setComplaint("");
+    setSide("");
+    setImageFile(null);
+    setImagePreview(null);
+    setBase64Image(null);
+    setReport(null);
+    setError(null);
+    setReportDate("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleGenerate = async () => {
+    if (!name.trim() || !age.trim() || !studyName.trim() || !complaint.trim() || !side) {
+      toast({ title: "Missing fields", description: "Please fill all the form fields.", variant: "destructive" });
+      return;
+    }
+    if (!base64Image) {
+      toast({ title: "No image", description: "Please upload an X-ray image.", variant: "destructive" });
+      return;
+    }
+
+    const apiKey = import.meta.env.VITE_GEMINI_KEY;
+    if (!apiKey) {
+      setError("Gemini API key not configured. Please contact administrator.");
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setReport(null);
+    const today = new Date().toLocaleDateString("en-IN");
+    setReportDate(today);
+
+    const promptText = `You are a Senior Orthopedic Radiologist at Balaji Ortho Care Center.
+Analyze this X-ray for:
+Patient: ${name}, Age: ${age} years
+Study: ${studyName}, Side: ${side}
+History/Complaint: ${complaint}
+Date: ${today}
+
+Generate a detailed professional radiology report:
+
+**1. Alignment & Bone Integrity**
+(detailed findings here)
+
+**2. Fracture / Dislocation Detection**
+(detailed findings here)
+
+**3. Joint Space & Degenerative Changes**
+(detailed findings here)
+
+**4. Soft Tissue & Implants**
+(detailed findings here)
+
+**5. Impression & Diagnosis**
+(summary diagnosis here)
+
+**Hindi Summary (मरीज के लिए)**
+(2 line mein simple Hindi mein)
+
+**Disclaimer**
+यह रिपोर्ट AI द्वारा तैयार की गई है। 
+अंतिम निदान के लिए डॉक्टर से परामर्श अनिश्चित है।
+This is an AI-assisted draft. Final diagnosis must be 
+verified by a qualified doctor.
+
+If the image is NOT a medical X-ray, respond ONLY with:
+ERROR: Please upload a clear medical X-ray image.`;
+
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  { inline_data: { mime_type: mimeType, data: base64Image } },
+                  { text: promptText },
+                ],
+              },
+            ],
+            generationConfig: { temperature: 0.1, maxOutputTokens: 2000 },
+          }),
+        }
+      );
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error?.message || "Gemini API error");
+
+      const text: string = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
+      if (text.trim().startsWith("ERROR:")) {
+        setError("Please upload a clear medical X-ray image.");
+        setReport(null);
+      } else {
+        setReport(text.trim());
+      }
+    } catch (e) {
+      setError("Failed to generate report: " + (e instanceof Error ? e.message : "Unknown error"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Convert markdown-ish bold + section headers to HTML
+  const renderReport = (text: string) => {
+    const lines = text.split("\n");
+    return lines.map((line, idx) => {
+      const trimmed = line.trim();
+      if (!trimmed) return <div key={idx} style={{ height: "8px" }} />;
+      // Bold heading: **text**
+      const headingMatch = trimmed.match(/^\*\*(.+?)\*\*$/);
+      if (headingMatch) {
+        return (
+          <h3
+            key={idx}
+            style={{
+              color: COLORS.accent,
+              fontSize: "15px",
+              fontWeight: 700,
+              marginTop: "14px",
+              marginBottom: "6px",
+              borderBottom: `1px solid ${COLORS.accent}33`,
+              paddingBottom: "3px",
+            }}
+          >
+            {headingMatch[1]}
+          </h3>
+        );
+      }
+      // Inline bold replacement
+      const parts = trimmed.split(/(\*\*[^*]+\*\*)/g);
+      return (
+        <p key={idx} style={{ margin: "4px 0", lineHeight: 1.6, color: COLORS.text, fontSize: "13.5px" }}>
+          {parts.map((p, i) =>
+            p.startsWith("**") && p.endsWith("**") ? (
+              <strong key={i}>{p.slice(2, -2)}</strong>
+            ) : (
+              <span key={i}>{p}</span>
+            )
+          )}
+        </p>
+      );
+    });
   };
 
   return (
     <DashboardLayout>
+      {/* Print-only styles */}
+      <style>{`
+        @media print {
+          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          nav, header, aside, .form-section, button, .sidebar,
+          [data-sidebar], .no-print { display: none !important; }
+          .report-panel {
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            box-shadow: none !important;
+            border: none !important;
+          }
+          .clinic-header { display: flex !important; }
+          body { background: white !important; }
+          @page { margin: 12mm; }
+        }
+      `}</style>
+
       <div className="space-y-6">
-        <AIXrayReport />
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="font-heading text-base">📂 Saved Reports</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {!savedAiReports.length ? (
-              <p className="text-muted-foreground text-sm text-center py-6">No AI reports saved yet</p>
-            ) : (
-              <div className="space-y-3">
-                {savedAiReports.map((r: any) => (
-                  <div key={r.id} className="grid grid-cols-[1fr_auto] sm:grid-cols-[1.5fr_1fr_1fr_auto] gap-3 items-center p-3 rounded-lg border hover:bg-muted/30">
-                    <div><p className="text-sm font-medium">{r.patient_name || (r.patients as any)?.name || "Unknown"}</p><p className="text-xs text-muted-foreground sm:hidden">{r.body_part || "—"}</p></div>
-                    <div className="hidden sm:block text-xs text-muted-foreground">{new Date(r.created_at || r.uploaded_at).toLocaleDateString("en-IN")}</div>
-                    <div className="hidden sm:block text-xs">{r.body_part || "—"} · {r.view_projection || "—"}</div>
-                    <Button variant="outline" size="sm" onClick={() => setSelectedSavedReport(r)}>View</Button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Dialog open={!!selectedSavedReport} onOpenChange={(v) => !v && setSelectedSavedReport(null)}>
-          <DialogContent className="max-w-2xl max-h-[85vh] overflow-auto">
-            <DialogHeader><DialogTitle className="font-heading">Saved AI Report</DialogTitle></DialogHeader>
-            {selectedSavedReport && (() => { const data = JSON.parse(selectedSavedReport.report_data || "{}"); return <div className="space-y-4 text-sm"><div className="rounded-lg border-b-4 border-primary p-3 bg-muted/20"><h2 className="font-heading font-bold text-lg">Balaji Ortho Care Center</h2><p className="text-xs text-muted-foreground">Dr. S. S. Rathore (DMRT | BPT) · Opp Govt Hospital, Bay Pass Road, Khinwara</p></div><div className="grid grid-cols-2 gap-3 rounded-lg bg-muted/40 p-3"><div><span className="text-muted-foreground">Name</span><b className="block">{selectedSavedReport.patient_name || "Unknown"}</b></div><div><span className="text-muted-foreground">Body Part</span><b className="block">{selectedSavedReport.body_part || data.bodyPartDetected || "—"}</b></div><div><span className="text-muted-foreground">View</span><b className="block">{selectedSavedReport.view_projection || "—"}</b></div><div><span className="text-muted-foreground">Date</span><b className="block">{new Date(selectedSavedReport.created_at || selectedSavedReport.uploaded_at).toLocaleDateString("en-IN")}</b></div></div><section><h3 className="font-bold text-primary">Findings</h3><p className="whitespace-pre-line">{data.findings?.overall}</p>{[["Bones", data.findings?.bones], ["Soft Tissues", data.findings?.softTissues], ["Specific", data.findings?.specificFindings], ["Extra", data.findings?.extraFindings]].filter(([, v]) => v).map(([k, v]) => <p key={k}><b>{k}:</b> {v}</p>)}</section><section className="rounded-lg bg-primary/10 border-l-4 border-primary p-3"><h3 className="font-bold text-primary">Impression</h3><p className="whitespace-pre-line font-medium">{data.impression}</p></section>{data.recommendations && <section><h3 className="font-bold text-primary">Recommendations</h3><p>{data.recommendations}</p></section>}<Button className="w-full" onClick={() => printSavedAiReport(selectedSavedReport)}>🖨️ Print Report</Button></div>; })()}
-          </DialogContent>
-        </Dialog>
-
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="module-header">Reports & X-Ray</h1>
-            <p className="text-sm text-muted-foreground">Upload and manage medical reports</p>
-          </div>
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button className="gap-2"><Upload className="h-4 w-4" />Upload Report</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader><DialogTitle className="font-heading">Upload Report</DialogTitle></DialogHeader>
-              <form onSubmit={handleUpload} className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Patient</Label>
-                  <Select value={form.patient_id} onValueChange={v => setForm(p => ({ ...p, patient_id: v }))}>
-                    <SelectTrigger><SelectValue placeholder="Select patient" /></SelectTrigger>
-                    <SelectContent>
-                      {patients?.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Report Type</Label>
-                  <Select value={form.report_type} onValueChange={v => setForm(p => ({ ...p, report_type: v }))}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="X-Ray">X-Ray</SelectItem>
-                      <SelectItem value="MRI">MRI</SelectItem>
-                      <SelectItem value="Lab Report">Lab Report</SelectItem>
-                      <SelectItem value="Prescription">Prescription</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>File</Label>
-                  <Input type="file" accept="image/*,.pdf" onChange={e => setFile(e.target.files?.[0] || null)} />
-                </div>
-                <Button type="submit" className="w-full" disabled={uploading}>
-                  {uploading ? "Uploading..." : "Upload"}
-                </Button>
-              </form>
-            </DialogContent>
-          </Dialog>
+        <div className="no-print">
+          <h1 className="module-header flex items-center gap-2">
+            <Sparkles className="h-6 w-6 text-primary" />
+            Orthopedic X-Ray AI Analysis
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Professional AI-assisted X-ray report generator · {CLINIC.name}
+          </p>
         </div>
 
-        <Card>
+        {/* FORM */}
+        <Card className="form-section no-print">
           <CardHeader>
-            <CardTitle className="font-heading text-base">Uploaded Reports</CardTitle>
+            <CardTitle className="font-heading text-base">Patient & Study Details</CardTitle>
           </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <p className="text-muted-foreground text-sm">Loading...</p>
-            ) : !reports?.length ? (
-              <p className="text-muted-foreground text-sm text-center py-8">No reports uploaded yet</p>
-            ) : (
-              <div className="space-y-3">
-                {reports.map((r) => (
-                  <div key={r.id} className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/30 transition-colors">
-                    <div className="flex items-center gap-3">
-                      <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${typeIcon[r.report_type || ""] || "bg-muted"}`}>
-                        {r.report_type === "X-Ray" ? <Image className="h-5 w-5" /> : <FileText className="h-5 w-5" />}
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium">{(r.patients as any)?.name}</p>
-                        <p className="text-xs text-muted-foreground">{new Date(r.uploaded_at).toLocaleDateString("en-IN")}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <Badge variant="outline" className="text-xs">{r.report_type}</Badge>
-                      {r.file_url && (
-                        <a href={r.file_url} target="_blank" rel="noopener noreferrer">
-                          <Button variant="ghost" size="icon" className="h-8 w-8"><Download className="h-4 w-4" /></Button>
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                ))}
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="name">Patient Name</Label>
+                <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="age">Age (years)</Label>
+                <Input id="age" type="number" value={age} onChange={(e) => setAge(e.target.value)} placeholder="e.g. 45" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="study">Study Name</Label>
+                <Input id="study" value={studyName} onChange={(e) => setStudyName(e.target.value)} placeholder="e.g. Knee AP View, Spine LAT" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="side">Side</Label>
+                <Select value={side} onValueChange={setSide}>
+                  <SelectTrigger id="side"><SelectValue placeholder="Select side" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Left">Left</SelectItem>
+                    <SelectItem value="Right">Right</SelectItem>
+                    <SelectItem value="Bilateral">Bilateral</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="complaint">History / Complaint</Label>
+              <Textarea
+                id="complaint"
+                value={complaint}
+                onChange={(e) => setComplaint(e.target.value)}
+                placeholder="Pain duration, trauma history, swelling, prior surgery, etc."
+                className="min-h-24"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="xray">X-Ray Image (JPG, PNG)</Label>
+              <Input
+                id="xray"
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/jpg,image/png"
+                onChange={handleImageChange}
+              />
+              {imagePreview && (
+                <div className="mt-2 rounded-md border p-2 bg-muted/30">
+                  <img src={imagePreview} alt="X-ray preview" className="max-h-64 mx-auto rounded" />
+                  <p className="mt-1 text-xs text-muted-foreground text-center">{imageFile?.name}</p>
+                </div>
+              )}
+            </div>
+
+            {error && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
             )}
+
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Button onClick={handleGenerate} disabled={loading} className="gap-2">
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                {loading ? "Analyzing..." : "Generate AI Report"}
+              </Button>
+              <Button variant="outline" onClick={handleReset} disabled={loading} className="gap-2">
+                <RotateCcw className="h-4 w-4" /> Reset
+              </Button>
+            </div>
           </CardContent>
         </Card>
+
+        {/* LOADING */}
+        {loading && (
+          <div className="no-print flex flex-col items-center justify-center py-10 gap-3">
+            <Loader2 className="h-10 w-10 animate-spin" style={{ color: COLORS.accent }} />
+            <p className="text-sm font-medium" style={{ color: COLORS.accent }}>
+              Analyzing X-ray, please wait...
+            </p>
+          </div>
+        )}
+
+        {/* REPORT PANEL */}
+        {report && (
+          <>
+            <div className="no-print flex justify-end">
+              <Button
+                onClick={() => window.print()}
+                className="gap-2"
+                style={{ background: COLORS.accent, color: "white" }}
+              >
+                <Download className="h-4 w-4" /> Download PDF
+              </Button>
+            </div>
+
+            <div
+              className="report-panel mx-auto"
+              style={{
+                background: "white",
+                color: COLORS.text,
+                padding: "32px",
+                maxWidth: "850px",
+                boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
+                borderRadius: "8px",
+                fontFamily: "Arial, sans-serif",
+              }}
+            >
+              {/* CLINIC HEADER */}
+              <div
+                className="clinic-header"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "16px",
+                  borderBottom: `2px solid ${COLORS.accent}`,
+                  paddingBottom: "14px",
+                  marginBottom: "16px",
+                }}
+              >
+                <img
+                  src="/images/logo.png"
+                  alt="Balaji Logo"
+                  style={{ height: "70px", width: "70px", objectFit: "contain" }}
+                  onError={(e) => ((e.target as HTMLImageElement).style.display = "none")}
+                />
+                <div>
+                  <div style={{ fontSize: "22px", fontWeight: 800, color: COLORS.primary, lineHeight: 1.2 }}>
+                    {CLINIC.name}
+                  </div>
+                  <div style={{ fontSize: "13px", color: COLORS.text, marginTop: "2px" }}>{CLINIC.doctor}</div>
+                  <div style={{ fontSize: "12px", color: "#555", marginTop: "2px" }}>{CLINIC.address}</div>
+                  <div style={{ fontSize: "12px", color: "#555" }}>Phone: {CLINIC.phone}</div>
+                </div>
+              </div>
+
+              {/* TITLE */}
+              <div
+                style={{
+                  textAlign: "center",
+                  fontSize: "18px",
+                  fontWeight: 700,
+                  letterSpacing: "1px",
+                  color: COLORS.primary,
+                  borderBottom: `2px solid ${COLORS.accent}`,
+                  paddingBottom: "10px",
+                  marginBottom: "14px",
+                }}
+              >
+                X-RAY ANALYSIS REPORT
+              </div>
+
+              {/* PATIENT META */}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: "6px 24px",
+                  fontSize: "13.5px",
+                  paddingBottom: "12px",
+                  borderBottom: `1px solid ${COLORS.accent}66`,
+                  marginBottom: "14px",
+                }}
+              >
+                <div><strong>Patient:</strong> {name}</div>
+                <div><strong>Date:</strong> {reportDate}</div>
+                <div><strong>Age:</strong> {age} years</div>
+                <div><strong>Study:</strong> {studyName}</div>
+                <div><strong>Side:</strong> {side}</div>
+                <div />
+                <div style={{ gridColumn: "1 / -1" }}><strong>History:</strong> {complaint}</div>
+              </div>
+
+              {/* AI REPORT BODY */}
+              <div style={{ paddingBottom: "16px", borderBottom: `1px solid ${COLORS.accent}66` }}>
+                {renderReport(report)}
+              </div>
+
+              {/* FOOTER */}
+              <div style={{ textAlign: "center", marginTop: "14px", fontSize: "12px", color: "#666" }}>
+                <div style={{ fontWeight: 600, color: COLORS.primary }}>Medix Medical</div>
+                <div>Thank you for choosing {CLINIC.name}</div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* PAGE FOOTER */}
+        <div className="no-print text-center text-xs text-muted-foreground border-t pt-4 mt-6">
+          <div className="font-semibold">{CLINIC.name} | {CLINIC.doctor}</div>
+          <div>{CLINIC.address}</div>
+          <div className="mt-1">AI-assisted analysis | For doctor verification only.</div>
+        </div>
       </div>
     </DashboardLayout>
   );
