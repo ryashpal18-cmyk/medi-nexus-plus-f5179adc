@@ -549,13 +549,31 @@ export default function Billing() {
       const patientName = patient?.name || "Patient";
       const mobile = patient?.mobile || "";
 
+      // Mirror to local C:\BalajiOrtho\data via Electron (and localStorage cache)
+      saveLocalData("bill", {
+        id: result.id,
+        patient_id: selectedPatient,
+        patient_name: patientName,
+        amount: totalAmount,
+        amount_paid: paidNum,
+        services: validServices,
+        created_at: result.created_at,
+      });
+
       if (mobile) {
+        const xrayUrl = await getLatestSignedXrayUrl(selectedPatient);
+        const itemsForMsg = validServices.map((s) => ({
+          name: s.name,
+          amount: parseFloat(s.amount) || 0,
+        }));
         const msg = getWhatsAppBillMessage(
           patientName,
           totalAmount,
           paidNum,
           `INV-${result.id.slice(0, 8).toUpperCase()}`,
           new Date(result.created_at).toLocaleDateString("en-IN"),
+          itemsForMsg,
+          xrayUrl,
         );
         openWhatsAppWeb(mobile, msg);
         toast({ title: "✅ WhatsApp Ready", description: "📱 Patient ko WhatsApp bhejo" });
@@ -596,12 +614,22 @@ export default function Billing() {
       toast({ title: "Generating PDF...", description: "Please wait" });
       await generateAndUploadPDF(bill);
     }
+    const items = String(bill.service || "")
+      .split("|")
+      .map((s: string) => {
+        const [name, amt] = s.split(":");
+        return { name: (name || "").trim(), amount: parseFloat(amt) || 0 };
+      })
+      .filter((i: any) => i.name);
+    const xrayUrl = await getLatestSignedXrayUrl(bill.patient_id);
     const msg = getWhatsAppBillMessage(
       patientName,
       Number(bill.amount),
       Number((bill as any).amount_paid || 0),
       `INV-${bill.id.slice(0, 8).toUpperCase()}`,
       new Date(bill.created_at).toLocaleDateString("en-IN"),
+      items,
+      xrayUrl,
     );
     openWhatsAppWeb(mobile, msg);
   };
