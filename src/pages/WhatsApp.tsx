@@ -11,18 +11,18 @@ import { usePatients } from "@/hooks/useDatabase";
 import { toast } from "@/hooks/use-toast";
 
 const TEMPLATES: Record<string, string> = {
-  welcome: `🙏 Namaste [NAME],
+  welcome: `नमस्ते [NAME] जी 🙏
 
-Balaji Ortho Care Center में आपका स्वागत है!
+श्री बालाजी ऑर्थो केयर सेंटर में आपका स्वागत है।
 
 👨‍⚕️ Dr. S. S. Rathore (DMRT | BPT)
 📍 Opp Govt Hospital, Bay Pass Road, Khinwara, Raj. – 306502
 📞 +91 8005707783
 
-🌐 Online Reports & Appointments:
+🌐 ऑनलाइन रिपोर्ट व अपॉइंटमेंट:
 https://balaji-health-hub.lovable.app/
 
-धन्यवाद! 🙏`,
+जल्द स्वस्थ होने की कामना करते हैं। धन्यवाद! 🙏`,
   reminder: `Namaste [NAME],
 
 Balaji Ortho Care Center se nivedan hai ki aapka payment pending hai.
