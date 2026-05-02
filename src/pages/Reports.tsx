@@ -40,6 +40,11 @@ export default function Reports() {
   const [mobile, setMobile] = useState("");
   const [file, setFile] = useState<File | null>(null);
 
+  // Printer-capture viewer state
+  const [capture, setCapture] = useState<{ src: string; localPath: string } | null>(null);
+  const [linkMobile, setLinkMobile] = useState("");
+  const [linking, setLinking] = useState(false);
+
   const load = async () => {
     setLoading(true);
     const { data, error } = await supabase
@@ -77,6 +82,72 @@ export default function Reports() {
   useEffect(() => {
     load();
   }, []);
+
+  // Listen for X-rays captured from the printer (Electron desktop only)
+  useEffect(() => {
+    const unsub = onPrinterCapture((imagePath) => {
+      // Electron sends an absolute file path on C:\BalajiOrtho\captures\...
+      // Convert to a viewable URL.
+      const src = imagePath.startsWith("file://")
+        ? imagePath
+        : `file:///${imagePath.replace(/\\/g, "/")}`;
+      setCapture({ src, localPath: imagePath });
+      setLinkMobile("");
+      toast({
+        title: "🖨️ X-Ray Received",
+        description: "Printer से नई image आई — patient से link करें",
+      });
+    });
+    return unsub;
+  }, []);
+
+  const handleLinkCapture = async () => {
+    if (!capture) return;
+    if (!/^\d{10}$/.test(linkMobile)) {
+      toast({ title: "Invalid mobile", description: "10-digit mobile डालें", variant: "destructive" });
+      return;
+    }
+    setLinking(true);
+    try {
+      const { data: patient, error: pErr } = await supabase
+        .from("patients")
+        .select("id, name")
+        .eq("mobile", linkMobile)
+        .maybeSingle();
+      if (pErr) throw pErr;
+      if (!patient) {
+        toast({ title: "Patient not found", description: "पहले patient register करें", variant: "destructive" });
+        return;
+      }
+
+      // Fetch the file from the local disk and upload to storage
+      const res = await fetch(capture.src);
+      const blob = await res.blob();
+      const fileName = capture.localPath.split(/[\\/]/).pop() || `xray-${Date.now()}.png`;
+      const path = `${patient.id}/${Date.now()}-${fileName}`;
+      const { error: upErr } = await supabase.storage
+        .from("xray-files")
+        .upload(path, blob, { contentType: blob.type || "image/png" });
+      if (upErr) throw upErr;
+
+      const { error: insErr } = await supabase.from("xray_reports").insert({
+        patient_id: patient.id,
+        file_url: path,
+        report_type: "X-Ray",
+      });
+      if (insErr) throw insErr;
+
+      toast({ title: "✅ Linked", description: `X-Ray ${patient.name} से link हो गई` });
+      setCapture(null);
+      setLinkMobile("");
+      load();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Link failed";
+      toast({ title: "Error", description: msg, variant: "destructive" });
+    } finally {
+      setLinking(false);
+    }
+  };
 
   const handleUpload = async () => {
     if (!/^\d{10}$/.test(mobile)) {
