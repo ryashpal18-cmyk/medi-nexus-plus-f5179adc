@@ -187,6 +187,14 @@ export default function OPD() {
           address: regForm.address || null,
         }).eq("id", existingPatient.id);
         toast({ title: "✅ Patient Found", description: `${regForm.name} already registered — details updated` });
+        saveLocalData("patient", {
+          id: existingPatient.id,
+          name: regForm.name,
+          mobile: regForm.mobile.replace(/\D/g, ""),
+          age: regForm.age ? parseInt(regForm.age) : null,
+          gender: regForm.gender || null,
+          address: regForm.address || null,
+        });
       } else {
         // Create new patient
         const result = await addPatient.mutateAsync({
@@ -198,6 +206,14 @@ export default function OPD() {
         });
         patientId = result.id;
         toast({ title: "🆕 New Patient Registered", description: `${regForm.name} successfully registered!` });
+        saveLocalData("patient", {
+          id: result.id,
+          name: regForm.name,
+          mobile: regForm.mobile.replace(/\D/g, ""),
+          age: regForm.age ? parseInt(regForm.age) : null,
+          gender: regForm.gender || null,
+          address: regForm.address || null,
+        });
       }
 
       // Navigate to billing page directly after registration
