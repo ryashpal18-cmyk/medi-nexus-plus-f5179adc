@@ -799,6 +799,14 @@ export default function Billing() {
           </div>
         ))}
       </div>
+      <datalist id="bill-service-options">
+        {SERVICE_OPTIONS.map((opt) => (
+          <option key={opt} value={opt} />
+        ))}
+      </datalist>
+      <p className="text-[11px] text-muted-foreground">
+        💡 Tip: कोई भी custom item (Splint, Consultation, etc.) टाइप करके price डाल सकते हैं — Total अपने आप update होगा।
+      </p>
     </div>
   );
 
