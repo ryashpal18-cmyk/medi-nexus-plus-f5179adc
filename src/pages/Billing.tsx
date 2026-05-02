@@ -687,12 +687,19 @@ export default function Billing() {
       const patientName = patient?.name || "Patient";
 
       if (mobile) {
+        const xrayUrl = await getLatestSignedXrayUrl(editingBill.patient_id);
+        const itemsForMsg = validServices.map((s) => ({
+          name: s.name,
+          amount: parseFloat(s.amount) || 0,
+        }));
         const msg = getWhatsAppBillMessage(
           patientName,
           newTotal,
           paidNum,
           `INV-${editingBill.id.slice(0, 8).toUpperCase()}`,
           new Date(editingBill.created_at).toLocaleDateString("en-IN"),
+          itemsForMsg,
+          xrayUrl,
         );
         openWhatsAppWeb(mobile, msg);
       }
