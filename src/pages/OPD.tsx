@@ -16,6 +16,7 @@ import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { openWhatsAppWeb } from "@/pages/WhatsApp";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
+import { findLocalPatientByMobile, saveLocalData } from "@/lib/electronBridge";
 
 const orthoAdvice: Record<string, string> = {
   "Plaster Care": "प्लास्टर केयर सलाह:\n• प्लास्टर को सूखा रखें\n• उंगलियों को हिलाते रहें\n• सूजन या सुन्नपन होने पर तुरंत डॉक्टर से मिलें\n• प्लास्टर को खुद न निकालें",
@@ -111,7 +112,20 @@ export default function OPD() {
 
     const cleanMobile = mobile.replace(/\D/g, "");
     if (cleanMobile.length >= 10) {
-      setMobileSearchStatus("searching");
+      // 1) Check local-data first (works offline / instant auto-fill)
+      const local = findLocalPatientByMobile(cleanMobile);
+      if (local) {
+        setRegForm({
+          mobile,
+          name: local.name || "",
+          age: local.age?.toString() || "",
+          gender: local.gender || "",
+          address: local.address || "",
+        });
+        setMobileSearchStatus("found");
+      }
+
+      setMobileSearchStatus(local ? "found" : "searching");
       try {
         const { data, error } = await supabase
           .from("patients")
@@ -130,11 +144,13 @@ export default function OPD() {
             address: patient.address || "",
           });
           setMobileSearchStatus("found");
-        } else {
+          // Refresh local cache
+          saveLocalData("patient", patient);
+        } else if (!local) {
           setMobileSearchStatus("new");
         }
       } catch {
-        setMobileSearchStatus("new");
+        if (!local) setMobileSearchStatus("new");
       }
     }
   };
