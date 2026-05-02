@@ -771,18 +771,13 @@ export default function Billing() {
       <div className="space-y-2 max-h-48 overflow-y-auto">
         {services.map((s, idx) => (
           <div key={idx} className="flex gap-2 items-center">
-            <Select value={s.name} onValueChange={(v) => updateService(idx, "name", v)}>
-              <SelectTrigger className="flex-1 h-9">
-                <SelectValue placeholder="Service" />
-              </SelectTrigger>
-              <SelectContent>
-                {SERVICE_OPTIONS.map((opt) => (
-                  <SelectItem key={opt} value={opt}>
-                    {opt}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Input
+              list="bill-service-options"
+              placeholder="Service / Custom Item (e.g. Splint, Consultation)"
+              className="flex-1 h-9"
+              value={s.name}
+              onChange={(e) => updateService(idx, "name", e.target.value)}
+            />
             <Input
               type="number"
               placeholder="₹"
