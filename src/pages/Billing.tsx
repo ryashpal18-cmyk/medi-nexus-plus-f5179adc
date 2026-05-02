@@ -55,6 +55,26 @@ import * as XLSX from "xlsx";
 import html2pdf from "html2pdf.js";
 import { openWhatsAppWeb } from "@/pages/WhatsApp";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
+import { saveLocalData } from "@/lib/electronBridge";
+
+async function getLatestSignedXrayUrl(patientId: string): Promise<string | null> {
+  try {
+    const { data } = await supabase
+      .from("xray_reports")
+      .select("file_url")
+      .eq("patient_id", patientId)
+      .order("uploaded_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!data?.file_url) return null;
+    const { data: signed } = await supabase.storage
+      .from("xray-files")
+      .createSignedUrl(data.file_url, 60 * 60 * 24 * 7);
+    return signed?.signedUrl ?? null;
+  } catch {
+    return null;
+  }
+}
 
 const statusStyle: Record<string, string> = {
   Paid: "bg-success/10 text-success",
@@ -99,32 +119,31 @@ function getWhatsAppBillMessage(
   paid: number,
   billNo: string,
   date: string,
+  items: { name: string; amount: number }[] = [],
+  xrayUrl?: string | null,
 ) {
   const due = Math.max(amount - paid, 0);
-  const appUrl = `${window.location.origin}/reports`;
-  return `नमस्ते ${patient} जी 🙏
+  const itemized = items.length
+    ? items
+        .map((i, idx) => `${idx + 1}. ${i.name} — ₹${Number(i.amount).toLocaleString()}`)
+        .join("\n")
+    : `1. सेवा शुल्क — ₹${amount.toLocaleString()}`;
+  const xrayLine = xrayUrl
+    ? `\n\n🩻 आपका डिजिटल एक्स-रे लिंक:\n${xrayUrl}\n(इसे आप देख और डाउनलोड कर सकते हैं)`
+    : "";
+  return `नमस्ते! श्री बालाजी ऑर्थो केयर सेंटर में आपका स्वागत है। 🙏
 
-Balaji Ortho Care Center में आपका 
-स्वागत है।
+पेशेंट: ${patient} | बिल नं: ${billNo} | दिनांक: ${date}
 
-📋 आपका बिल तैयार है:
-🔢 बिल नंबर: ${billNo}
-📅 दिनांक: ${date}
-💰 कुल राशि: ₹${amount}
-✅ जमा: ₹${paid}
-❗ बकाया: ₹${due}
+बिल विवरण:
+${itemized}
 
-━━━━━━━━━━━━━━
-🩻 X-Ray रिपोर्ट समझ नहीं आई?
+कुल राशि: ₹${amount.toLocaleString()}
+✅ जमा: ₹${paid.toLocaleString()}
+❗ बकाया: ₹${due.toLocaleString()}${xrayLine}
 
-घर बैठे AI से देखें - सिर्फ ₹50 में!
-तुरंत आसान भाषा में रिपोर्ट
-
-👇 Click करें:
-${appUrl}
-
-धन्यवाद 🙏
-Balaji Ortho Care Center`;
+जल्द स्वस्थ होने की कामना करते हैं। धन्यवाद!
+— Balaji Ortho Care Center`;
 }
 
 function getWhatsAppReminderMessage(patient: string, total: number, paid: number, due: number) {
