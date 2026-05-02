@@ -55,6 +55,26 @@ import * as XLSX from "xlsx";
 import html2pdf from "html2pdf.js";
 import { openWhatsAppWeb } from "@/pages/WhatsApp";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
+import { saveLocalData } from "@/lib/electronBridge";
+
+async function getLatestSignedXrayUrl(patientId: string): Promise<string | null> {
+  try {
+    const { data } = await supabase
+      .from("xray_reports")
+      .select("file_url")
+      .eq("patient_id", patientId)
+      .order("uploaded_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!data?.file_url) return null;
+    const { data: signed } = await supabase.storage
+      .from("xray-files")
+      .createSignedUrl(data.file_url, 60 * 60 * 24 * 7);
+    return signed?.signedUrl ?? null;
+  } catch {
+    return null;
+  }
+}
 
 const statusStyle: Record<string, string> = {
   Paid: "bg-success/10 text-success",
@@ -99,32 +119,31 @@ function getWhatsAppBillMessage(
   paid: number,
   billNo: string,
   date: string,
+  items: { name: string; amount: number }[] = [],
+  xrayUrl?: string | null,
 ) {
   const due = Math.max(amount - paid, 0);
-  const appUrl = `${window.location.origin}/reports`;
-  return `नमस्ते ${patient} जी 🙏
+  const itemized = items.length
+    ? items
+        .map((i, idx) => `${idx + 1}. ${i.name} — ₹${Number(i.amount).toLocaleString()}`)
+        .join("\n")
+    : `1. सेवा शुल्क — ₹${amount.toLocaleString()}`;
+  const xrayLine = xrayUrl
+    ? `\n\n🩻 आपका डिजिटल एक्स-रे लिंक:\n${xrayUrl}\n(इसे आप देख और डाउनलोड कर सकते हैं)`
+    : "";
+  return `नमस्ते! श्री बालाजी ऑर्थो केयर सेंटर में आपका स्वागत है। 🙏
 
-Balaji Ortho Care Center में आपका 
-स्वागत है।
+पेशेंट: ${patient} | बिल नं: ${billNo} | दिनांक: ${date}
 
-📋 आपका बिल तैयार है:
-🔢 बिल नंबर: ${billNo}
-📅 दिनांक: ${date}
-💰 कुल राशि: ₹${amount}
-✅ जमा: ₹${paid}
-❗ बकाया: ₹${due}
+बिल विवरण:
+${itemized}
 
-━━━━━━━━━━━━━━
-🩻 X-Ray रिपोर्ट समझ नहीं आई?
+कुल राशि: ₹${amount.toLocaleString()}
+✅ जमा: ₹${paid.toLocaleString()}
+❗ बकाया: ₹${due.toLocaleString()}${xrayLine}
 
-घर बैठे AI से देखें - सिर्फ ₹50 में!
-तुरंत आसान भाषा में रिपोर्ट
-
-👇 Click करें:
-${appUrl}
-
-धन्यवाद 🙏
-Balaji Ortho Care Center`;
+जल्द स्वस्थ होने की कामना करते हैं। धन्यवाद!
+— Balaji Ortho Care Center`;
 }
 
 function getWhatsAppReminderMessage(patient: string, total: number, paid: number, due: number) {
@@ -530,13 +549,31 @@ export default function Billing() {
       const patientName = patient?.name || "Patient";
       const mobile = patient?.mobile || "";
 
+      // Mirror to local C:\BalajiOrtho\data via Electron (and localStorage cache)
+      saveLocalData("bill", {
+        id: result.id,
+        patient_id: selectedPatient,
+        patient_name: patientName,
+        amount: totalAmount,
+        amount_paid: paidNum,
+        services: validServices,
+        created_at: result.created_at,
+      });
+
       if (mobile) {
+        const xrayUrl = await getLatestSignedXrayUrl(selectedPatient);
+        const itemsForMsg = validServices.map((s) => ({
+          name: s.name,
+          amount: parseFloat(s.amount) || 0,
+        }));
         const msg = getWhatsAppBillMessage(
           patientName,
           totalAmount,
           paidNum,
           `INV-${result.id.slice(0, 8).toUpperCase()}`,
           new Date(result.created_at).toLocaleDateString("en-IN"),
+          itemsForMsg,
+          xrayUrl,
         );
         openWhatsAppWeb(mobile, msg);
         toast({ title: "✅ WhatsApp Ready", description: "📱 Patient ko WhatsApp bhejo" });
@@ -577,12 +614,22 @@ export default function Billing() {
       toast({ title: "Generating PDF...", description: "Please wait" });
       await generateAndUploadPDF(bill);
     }
+    const items = String(bill.service || "")
+      .split("|")
+      .map((s: string) => {
+        const [name, amt] = s.split(":");
+        return { name: (name || "").trim(), amount: parseFloat(amt) || 0 };
+      })
+      .filter((i: any) => i.name);
+    const xrayUrl = await getLatestSignedXrayUrl(bill.patient_id);
     const msg = getWhatsAppBillMessage(
       patientName,
       Number(bill.amount),
       Number((bill as any).amount_paid || 0),
       `INV-${bill.id.slice(0, 8).toUpperCase()}`,
       new Date(bill.created_at).toLocaleDateString("en-IN"),
+      items,
+      xrayUrl,
     );
     openWhatsAppWeb(mobile, msg);
   };
@@ -640,12 +687,19 @@ export default function Billing() {
       const patientName = patient?.name || "Patient";
 
       if (mobile) {
+        const xrayUrl = await getLatestSignedXrayUrl(editingBill.patient_id);
+        const itemsForMsg = validServices.map((s) => ({
+          name: s.name,
+          amount: parseFloat(s.amount) || 0,
+        }));
         const msg = getWhatsAppBillMessage(
           patientName,
           newTotal,
           paidNum,
           `INV-${editingBill.id.slice(0, 8).toUpperCase()}`,
           new Date(editingBill.created_at).toLocaleDateString("en-IN"),
+          itemsForMsg,
+          xrayUrl,
         );
         openWhatsAppWeb(mobile, msg);
       }
@@ -717,18 +771,13 @@ export default function Billing() {
       <div className="space-y-2 max-h-48 overflow-y-auto">
         {services.map((s, idx) => (
           <div key={idx} className="flex gap-2 items-center">
-            <Select value={s.name} onValueChange={(v) => updateService(idx, "name", v)}>
-              <SelectTrigger className="flex-1 h-9">
-                <SelectValue placeholder="Service" />
-              </SelectTrigger>
-              <SelectContent>
-                {SERVICE_OPTIONS.map((opt) => (
-                  <SelectItem key={opt} value={opt}>
-                    {opt}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Input
+              list="bill-service-options"
+              placeholder="Service / Custom Item (e.g. Splint, Consultation)"
+              className="flex-1 h-9"
+              value={s.name}
+              onChange={(e) => updateService(idx, "name", e.target.value)}
+            />
             <Input
               type="number"
               placeholder="₹"
@@ -750,6 +799,14 @@ export default function Billing() {
           </div>
         ))}
       </div>
+      <datalist id="bill-service-options">
+        {SERVICE_OPTIONS.map((opt) => (
+          <option key={opt} value={opt} />
+        ))}
+      </datalist>
+      <p className="text-[11px] text-muted-foreground">
+        💡 Tip: कोई भी custom item (Splint, Consultation, etc.) टाइप करके price डाल सकते हैं — Total अपने आप update होगा।
+      </p>
     </div>
   );
 
