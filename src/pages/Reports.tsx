@@ -299,11 +299,65 @@ export default function Reports() {
           </CardContent>
         </Card>
 
+        {isElectron() && (
+          <div className="text-[11px] text-muted-foreground flex items-center gap-2">
+            <Printer className="h-3.5 w-3.5" />
+            Printer Capture सक्रिय है — किसी भी X-Ray को print करते ही यहाँ Digital Viewer में दिखेगी।
+          </div>
+        )}
+
         <div className="text-center text-xs text-muted-foreground border-t pt-4">
           <div className="font-semibold">{CLINIC.name} | {CLINIC.doctor}</div>
           <div>{CLINIC.address}</div>
         </div>
       </div>
+
+      {/* Digital Viewer for printer-captured X-Rays */}
+      <Dialog open={!!capture} onOpenChange={(v) => !v && setCapture(null)}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle className="font-heading flex items-center gap-2">
+              <Printer className="h-5 w-5 text-primary" /> Digital X-Ray Viewer
+            </DialogTitle>
+          </DialogHeader>
+          {capture && (
+            <div className="space-y-4">
+              <div className="rounded-lg border bg-black flex items-center justify-center overflow-hidden">
+                <img
+                  src={capture.src}
+                  alt="Captured X-Ray"
+                  className="max-h-[60vh] w-auto object-contain"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground break-all">
+                Local file: {capture.localPath}
+              </p>
+              <div className="grid gap-3 sm:grid-cols-[1fr_auto] items-end">
+                <div className="space-y-2">
+                  <Label htmlFor="link-mobile">Patient Mobile (10 digits)</Label>
+                  <Input
+                    id="link-mobile"
+                    inputMode="numeric"
+                    maxLength={10}
+                    value={linkMobile}
+                    onChange={(e) => setLinkMobile(e.target.value.replace(/\D/g, ""))}
+                    placeholder="e.g. 9876543210"
+                  />
+                </div>
+                <Button onClick={handleLinkCapture} disabled={linking} className="gap-2">
+                  {linking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
+                  {linking ? "Linking..." : "Link to Patient"}
+                </Button>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCapture(null)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }
