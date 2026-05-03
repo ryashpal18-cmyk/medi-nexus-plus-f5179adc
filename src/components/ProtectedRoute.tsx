@@ -7,16 +7,33 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [authenticated, setAuthenticated] = useState(false);
 
-  // APK me login nahi mangega - sirf website pe
-  if (Capacitor.isNativePlatform()) {
-    return <>{children}</>;
-  }
-
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setAuthenticated(!!session);
+    const init = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (session) {
+        setAuthenticated(true);
+        setLoading(false);
+        return;
+      }
+
+      if (Capacitor.isNativePlatform()) {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: "apk@balaji.com",
+          password: "Balaji@2024",
+        });
+        if (!error) {
+          setAuthenticated(true);
+        }
+        setLoading(false);
+        return;
+      }
+
+      setAuthenticated(false);
       setLoading(false);
-    });
+    };
+
+    init();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setAuthenticated(!!session);
