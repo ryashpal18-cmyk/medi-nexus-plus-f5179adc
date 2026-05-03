@@ -1,6 +1,6 @@
 {
   "appId": "com.balaji.orthomedi",
-  "appName": "Medi Nexus",
+  "appName": "Balaji Ortho Care Connect",
   "webDir": "dist",
   "server": {
     "androidScheme": "https",
