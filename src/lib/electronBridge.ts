@@ -7,6 +7,7 @@ declare global {
   interface Window {
     ipcRenderer?: {
       send: (channel: string, ...args: unknown[]) => void;
+      invoke?: (channel: string, ...args: unknown[]) => Promise<unknown>;
       on: (
         channel: string,
         listener: (event: unknown, ...args: unknown[]) => void,
