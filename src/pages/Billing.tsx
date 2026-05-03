@@ -129,7 +129,7 @@ function getWhatsAppBillMessage(
         .join("\n")
     : `1. सेवा शुल्क — ₹${amount.toLocaleString()}`;
   const xrayLine = xrayUrl
-    ? `\n\n🩻 आपका डिजिटल एक्स-रे लिंक:\n${xrayUrl}\n(इसे आप देख और डाउनलोड कर सकते हैं)`
+    ? `\n\n🩻 आपका डिजिटल एक्स-रे लिंक:\n${xrayUrl}`
     : "";
   return `नमस्ते! श्री बालाजी ऑर्थो केयर सेंटर में आपका स्वागत है। 🙏
 
@@ -143,7 +143,10 @@ ${itemized}
 ❗ बकाया: ₹${due.toLocaleString()}${xrayLine}
 
 जल्द स्वस्थ होने की कामना करते हैं। धन्यवाद!
-— Balaji Ortho Care Center`;
+— Balaji Ortho Care Center
+
+ऑनलाइन रिकॉर्ड देखें:
+https://balaji-health-hub.lovable.app/`;
 }
 
 function getWhatsAppReminderMessage(patient: string, total: number, paid: number, due: number) {
