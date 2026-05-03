@@ -17,6 +17,7 @@ import SettingsPage from "./pages/SettingsPage";
 import WhatsApp from "./pages/WhatsApp";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
+import { Capacitor } from "@capacitor/core";
 
 const queryClient = new QueryClient();
 
@@ -27,7 +28,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Login />} />
+          <Route path="/" element={Capacitor.isNativePlatform() ? <Dashboard /> : <Login />} />
           <Route path="/login" element={<Login />} />
           <Route
             path="/dashboard"
