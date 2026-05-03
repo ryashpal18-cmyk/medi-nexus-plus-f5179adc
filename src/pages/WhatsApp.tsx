@@ -45,10 +45,25 @@ Dhanyawad!`,
 };
 
 export function openWhatsAppWeb(mobile: string, message: string) {
-  const cleanMobile = mobile?.replace(/\D/g, "") || "";
+  const cleanMobile = (mobile || "").replace(/\D/g, "");
   const num = cleanMobile.startsWith("91") ? cleanMobile : `91${cleanMobile}`;
-  const url = `https://web.whatsapp.com/send?phone=${num}&text=${encodeURIComponent(message)}`;
-  window.open(url, "whatsapp_web_window", "width=1000,height=700,scrollbars=yes,resizable=yes");
+  const encoded = encodeURIComponent(message);
+  const webUrl = `https://web.whatsapp.com/send?phone=${num}&text=${encoded}`;
+  const desktopUrl = `whatsapp://send?phone=${num}&text=${encoded}`;
+
+  // Electron desktop: prefer WhatsApp Desktop, fallback to WhatsApp Web via shell.openExternal
+  const ipc = typeof window !== "undefined" ? window.ipcRenderer : undefined;
+  if (ipc) {
+    try {
+      ipc.send("open-whatsapp", { desktopUrl, webUrl });
+      return;
+    } catch (e) {
+      console.warn("[electron] open-whatsapp failed, falling back to web", e);
+    }
+  }
+
+  // Browser: reuse a single named window so we don't spawn duplicates / sessions
+  window.open(webUrl, "balaji_whatsapp_session", "width=1000,height=700,scrollbars=yes,resizable=yes");
 }
 
 export default function WhatsApp() {
