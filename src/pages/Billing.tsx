@@ -400,13 +400,19 @@ async function generateAndUploadPDF(bill: any): Promise<string | null> {
       return null;
     }
 
-    const { data: urlData } = supabase.storage.from("invoices").getPublicUrl(fileName);
+    const { data: signed, error: signErr } = await supabase.storage
+      .from("invoices")
+      .createSignedUrl(fileName, 60 * 60 * 24 * 7);
+    if (signErr || !signed) {
+      console.error("Signed URL error:", signErr);
+      return null;
+    }
     await supabase
       .from("billing")
-      .update({ invoice_pdf_url: urlData.publicUrl } as any)
+      .update({ invoice_pdf_url: signed.signedUrl } as any)
       .eq("id", bill.id);
 
-    return urlData.publicUrl;
+    return signed.signedUrl;
   } catch (err) {
     console.error("PDF generation error:", err);
     return null;
